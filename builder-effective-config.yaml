@@ -1,0 +1,21 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.turbocharger.ahu.calculator
+productName: 进气空调设计计算器
+files:
+  - filter:
+      - main.js
+      - index.html
+      - renderer.js
+      - calculations.js
+      - tutorial.js
+      - styles.css
+      - node_modules/**/*
+win:
+  target: portable
+  icon: null
+  signAndEditExecutable: false
+portable:
+  artifactName: AHU_Calculator.exe
+electronVersion: 33.4.0

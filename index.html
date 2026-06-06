@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>涡轮增压器测试台进气空调计算器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>涡轮增压器测试台 · 精密进气空调 (AHU) 设计计算系统</h1>
+      <p class="subtitle">完整设计流程 · 参数计算 · 设备选型指导 · 控制精度：温度±0.5℃ / 湿度±3% · v2.0</p>
+    </header>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('calc')">参数计算</button>
+      <button class="tab-btn" onclick="switchTab('guide')">设计指南</button>
+      <button class="tab-btn" onclick="switchTab('knowledge')">知识库</button>
+      <button class="tab-btn" onclick="switchTab('selection')">设备选型建议</button>
+    </div>
+    <div id="tab-calc" class="tab-content active">
+      <main class="two-col">
+        <section class="input-panel">
+          <h2>输入参数</h2>
+
+          <!-- 工况预设按钮 -->
+          <div class="preset-group">
+            <span class="preset-label">快速预设：</span>
+            <button class="preset-btn summer" onclick="setPreset('summer')" title="夏季极端工况：40℃ / 95% RH">☀ 夏季极端</button>
+            <button class="preset-btn winter" onclick="setPreset('winter')" title="冬季极端工况：-5℃ / 10% RH">❄ 冬季极端</button>
+            <button class="preset-btn standard" onclick="setPreset('standard')" title="标准测试工况：25℃ / 60% RH">📐 标准工况</button>
+          </div>
+
+          <!-- 实时计算开关 -->
+          <div class="auto-calc-toggle">
+            <label class="toggle-label">
+              <input type="checkbox" id="autoCalc" onchange="toggleAutoCalc()">
+              <span>实时计算</span>
+            </label>
+            <span class="toggle-hint">开启后输入参数变化时自动重新计算</span>
+          </div>
+
+          <div class="form-group">
+            <label for="massFlow">
+              空气质量流量 (kg/s)
+              <span class="info-icon" title="空气质量流量：每秒通过空调系统的干空气质量。&#10;这是空调系统设计最核心的参数之一，决定了所有设备（表冷器、加热器、风机）的容量。&#10;&#10;换算关系：体积流量 (m³/h) ≈ 质量流量 (kg/s) × 3000&#10;（空气密度取 1.2 kg/m³）">?</span>
+            </label>
+            <input type="number" id="massFlow" min="0.1" max="1.1" step="0.01" value="0.5" oninput="onParamChange()">
+            <span class="range-hint">范围：0.1 ~ 1.1 kg/s（对应约 300~3300 m³/h @ 1.2 kg/m³）</span>
+          </div>
+          <div class="form-group">
+            <label for="tempIn">
+              入口空气温度 (℃)
+              <span class="info-icon" title="入口空气温度：空调系统进口处空气的干球温度。&#10;&#10;设计范围 -5℃ ~ 40℃，覆盖中国大部分地区极端气候条件：&#10;• 夏季极端：40℃（如吐鲁番、重庆）&#10;• 冬季极端：-5℃（如哈尔滨、长春）&#10;&#10;该参数直接影响制冷/加热负荷的大小。">?</span>
+            </label>
+            <input type="number" id="tempIn" min="-5" max="40" step="0.5" value="35" oninput="onParamChange()">
+            <span class="range-hint">范围：-5 ~ 40 ℃（覆盖中国大部分地区极端温度）</span>
+          </div>
+          <div class="form-group">
+            <label for="rhIn">
+              入口相对湿度 (%)
+              <span class="info-icon" title="入口相对湿度：空气中水蒸气分压力与同温度下饱和水蒸气分压力之比。&#10;&#10;RH 越高，空气含湿量越大，除湿负荷越大。&#10;• 夏季高温高湿：80%~95% RH（沿海地区）&#10;• 冬季低温低湿：10%~30% RH（北方干燥地区）&#10;&#10;参考 GB 50736-2012《民用建筑供暖通风与空气调节设计规范》">?</span>
+            </label>
+            <input type="number" id="rhIn" min="10" max="95" step="1" value="80" oninput="onParamChange()">
+            <span class="range-hint">范围：10 ~ 95%</span>
+          </div>
+          <div class="form-group">
+            <label for="tempOut">
+              出口空气温度 (℃)
+              <span class="info-icon" title="出口空气温度：经过空调处理后送入测试台的空气温度。&#10;&#10;涡轮增压器测试标准通常要求进气温度为 20℃ ±5℃。&#10;• 推荐设定值：20℃&#10;• 可调范围：15 ~ 25℃&#10;&#10;参考 GB/T 23341.1-2018《涡轮增压器 第1部分：一般技术条件》">?</span>
+            </label>
+            <input type="number" id="tempOut" min="15" max="25" step="0.5" value="20" oninput="onParamChange()">
+            <span class="range-hint">目标范围：15 ~ 25 ℃（推荐 20℃）</span>
+          </div>
+          <div class="form-group">
+            <label for="rhOut">
+              出口相对湿度 (%)
+              <span class="info-icon" title="出口相对湿度：处理后空气的目标湿度。&#10;&#10;• 推荐设定值：50% RH（标准测试条件）&#10;• 可调范围：30% ~ 70% RH&#10;&#10;湿度过低 → 静电风险增加&#10;湿度过高 → 设备腐蚀、结露风险&#10;&#10;参考 GB/T 2423.3-2016《环境试验 第2部分：试验方法 试验Cab：恒定湿热试验》">?</span>
+            </label>
+            <input type="number" id="rhOut" min="30" max="70" step="1" value="50" oninput="onParamChange()">
+            <span class="range-hint">目标范围：30 ~ 70%（推荐 50%）</span>
+          </div>
+          <div class="form-group">
+            <label for="atmPressure">
+              大气压力 (kPa)
+              <span class="info-icon" title="大气压力：空调系统所在地的大气压力。&#10;&#10;标准海平面大气压：101.325 kPa&#10;&#10;海拔修正参考：&#10;• 海拔 0m → 101.325 kPa&#10;• 海拔 500m → 95.5 kPa&#10;• 海拔 1000m → 89.9 kPa&#10;• 海拔 1500m → 84.6 kPa&#10;• 海拔 2000m → 79.5 kPa&#10;&#10;高原地区大气压力降低，空气密度减小，&#10;影响风机选型和换热计算。&#10;&#10;参考 GB/T 4797.2-2017《环境条件分类 自然环境条件 气压》">?</span>
+            </label>
+            <input type="number" id="atmPressure" min="80" max="110" step="0.001" value="101.325" oninput="onParamChange()">
+            <span class="range-hint">标准大气压 101.325 kPa，高原地区需修正</span>
+          </div>
+          <div class="button-group">
+            <button id="calcBtn" onclick="calculate()">开始计算</button>
+            <button id="resetBtn" onclick="resetDefaults()">恢复默认</button>
+          </div>
+        </section>
+        <section class="output-panel">
+          <h2>计算结果</h2>
+          <div class="output-toolbar" id="outputToolbar" style="display:none;">
+            <button class="toolbar-btn" onclick="handleExport()" title="导出Excel格式计算报告（含日期、时间和所有计算内容）">📊 导出Excel报告</button>
+            <button class="toolbar-btn" onclick="togglePsychroChart()" title="显示/隐藏焓湿图">📈 焓湿图</button>
+          </div>
+          <div id="results">
+            <p class="placeholder">请输入参数并点击"开始计算"</p>
+          </div>
+          <div class="psychro-chart-container" id="psychroChartContainer" style="display:none;">
+            <h3>📈 空气处理过程线（焓湿图 h-d 图）</h3>
+            <p class="chart-explanation">焓湿图是空调设计的核心工具，横轴为干球温度，纵轴为含湿量。图中曲线为等相对湿度线，最上方粗线为饱和线(RH=100%)。蓝色点为入口状态，绿色点为出口状态，红色虚线为空气处理过程。底部显示详细的工况参数和处理类型说明。</p>
+            <canvas id="psychroCanvas" width="600" height="530"></canvas>
+            <div class="chart-legend">
+              <span class="legend-dot inlet"></span>入口空气状态点 &nbsp;
+              <span class="legend-dot outlet"></span>出口空气状态点 &nbsp;
+              <span class="legend-line process"></span>空气处理过程线 &nbsp;
+              <span class="legend-line sat"></span>饱和线(RH=100%)
+            </div>
+          </div>
+          <div class="air-state-summary" id="airStateSummary" style="display:none;">
+            <h3>空气状态参数汇总</h3>
+            <div id="airStateContent"></div>
+          </div>
+          <div id="calcProcess" class="calc-process" style="display:none;">
+            <h3>详细计算过程</h3>
+            <div id="processSteps"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div id="tab-guide" class="tab-content">
+      <section class="guide-panel">
+        <h2>进气空调系统 · 从零到精通设计指南</h2>
+        <p class="guide-intro">本指南专为零基础学习者设计，分为三大模块：<strong>入门篇</strong>（建立概念）、<strong>进阶篇</strong>（掌握计算）、<strong>实战篇</strong>（完整案例）。<br>每步包含：<strong>概念讲解</strong>、<strong>公式推导</strong>、<strong>设计要点</strong>、<strong>常见误区</strong>、<strong>扩展阅读</strong>。<br>点击右侧「扩展阅读」可随时查看相关学习资源。</p>
+        <div class="guide-module-tabs">
+          <button class="module-tab active" onclick="switchModule('beginner')">📗 入门篇</button>
+          <button class="module-tab" onclick="switchModule('advanced')">📘 进阶篇</button>
+          <button class="module-tab" onclick="switchModule('practice')">📙 实战篇</button>
+        </div>
+        <div class="guide-layout">
+          <div class="guide-main">
+            <div class="tutorial-progress">
+              <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill" style="width:20%;"></div>
+              </div>
+              <span class="progress-text" id="progressText">第 1 / 5 步</span>
+            </div>
+            <div class="step-dots" id="stepDots"></div>
+            <div class="tutorial-slide" id="tutorialSlide"></div>
+            <div class="tutorial-nav">
+              <button class="nav-btn" id="prevBtn" onclick="prevStep()" disabled>← 上一步</button>
+              <button class="nav-btn" id="nextBtn" onclick="nextStep()">下一步 →</button>
+            </div>
+          </div>
+          <div class="guide-sidebar">
+            <div class="sidebar-section">
+              <h3>📚 扩展阅读</h3>
+              <div id="readingLinks" class="reading-links"></div>
+            </div>
+            <div class="sidebar-section">
+              <h3>🔗 快速跳转</h3>
+              <div id="quickJump" class="quick-jump"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="tab-knowledge" class="tab-content">
+      <section class="knowledge-panel">
+        <h2>📖 核心知识库</h2>
+        <p class="guide-intro">这里是进气空调设计涉及的<strong>所有核心知识点</strong>的汇总。你可以随时查阅，配合设计指南学习。<br>点击左侧目录选择知识点，右侧显示详细内容。</p>
+        <div class="knowledge-layout">
+          <div class="knowledge-toc" id="knowledgeToc"></div>
+          <div class="knowledge-content" id="knowledgeContent">
+            <p class="placeholder">← 请从左侧目录选择一个知识点</p>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="tab-selection" class="tab-content">
+      <section class="selection-panel">
+        <h2>设备选型建议</h2>
+        <p class="guide-intro">基于当前计算结果，推荐以下设备配置方案：</p>
+        <div id="selectionResults">
+          <p class="placeholder">请先在"参数计算"页面进行计算</p>
+        </div>
+      </section>
+    </div>
+    <footer class="status-bar">
+      <span id="statusText">就绪</span>
+    </footer>
+  </div>
+  <script src="calculations.js"></script>
+  <script src="tutorial.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

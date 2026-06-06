@@ -1,0 +1,1774 @@
+/* ============================================
+   styles.css - 界面样式
+   涡轮增压器测试台进气空调计算器
+   ============================================ */
+
+/* 全局重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+}
+
+/* 主容器 */
+.container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  max-width: 1300px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+/* ========== 顶部标题栏 ========== */
+header {
+  background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 50%, #2c5282 100%);
+  color: white;
+  padding: 22px 30px;
+}
+
+header h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+/* ========== 标签导航栏 ========== */
+.tab-bar {
+  display: flex;
+  background: #edf2f7;
+  border-bottom: 2px solid #e2e8f0;
+  padding: 0;
+}
+
+.tab-btn {
+  padding: 14px 28px;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+  background: #e2e8f0;
+  color: #2b6cb0;
+}
+
+.tab-btn.active {
+  color: #2b6cb0;
+  border-bottom-color: #2b6cb0;
+  background: white;
+}
+
+/* ========== 标签内容 ========== */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ========== 双列布局 ========== */
+main.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 25px;
+}
+
+/* ========== 输入面板 ========== */
+.input-panel {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.input-panel h2,
+.output-panel h2 {
+  font-size: 1.15rem;
+  margin-bottom: 18px;
+  color: #2d3748;
+  border-bottom: 2px solid #2b6cb0;
+  padding-bottom: 8px;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: #4a5568;
+  font-size: 0.92rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #2b6cb0;
+  box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.15);
+}
+
+.range-hint {
+  display: block;
+  font-size: 0.76rem;
+  color: #a0aec0;
+  margin-top: 2px;
+}
+
+.button-group {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  padding: 11px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+#calcBtn {
+  background: linear-gradient(135deg, #2b6cb0 0%, #2c5282 100%);
+  color: white;
+  flex: 2;
+}
+
+#calcBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(43, 108, 176, 0.4);
+}
+
+#resetBtn {
+  background: #e2e8f0;
+  color: #4a5568;
+  flex: 1;
+}
+
+#resetBtn:hover {
+  background: #cbd5e0;
+}
+
+/* ========== 输出面板 ========== */
+.output-panel {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.output-panel h2 {
+  border-bottom-color: #2c5282;
+}
+
+#results {
+  min-height: 150px;
+}
+
+.placeholder {
+  color: #a0aec0;
+  text-align: center;
+  margin-top: 60px;
+  font-style: italic;
+}
+
+.result-item {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 11px 15px;
+  margin-bottom: 7px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.2s;
+}
+
+.result-item:hover {
+  border-color: #2b6cb0;
+}
+
+.result-label {
+  font-weight: 500;
+  color: #4a5568;
+  font-size: 0.92rem;
+}
+
+.result-value {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 1.05rem;
+}
+
+.result-value.cooling { color: #2b6cb0; }
+.result-value.heating { color: #c53030; }
+.result-value.dehumidify { color: #276749; }
+
+/* ========== 详细计算过程 ========== */
+.calc-process {
+  margin-top: 18px;
+  border-top: 2px dashed #e2e8f0;
+  padding-top: 14px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.calc-process h3 {
+  font-size: 0.95rem;
+  color: #4a5568;
+  margin-bottom: 10px;
+}
+
+.step-item {
+  background: white;
+  border-left: 3px solid #2b6cb0;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+
+.step-item .step-title {
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 3px;
+}
+
+.step-item .step-formula {
+  color: #718096;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.78rem;
+}
+
+.step-item .step-result {
+  color: #2d3748;
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+/* ========== 设计流程指南 ========== */
+.guide-panel,
+.selection-panel {
+  padding: 30px;
+}
+
+.guide-panel h2,
+.selection-panel h2 {
+  font-size: 1.3rem;
+  color: #2d3748;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #2b6cb0;
+  padding-bottom: 10px;
+}
+
+.guide-intro {
+  color: #718096;
+  margin-bottom: 25px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.guide-step {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 22px;
+  padding: 18px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.3s;
+}
+
+.guide-step:hover {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  background: #2b6cb0;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.step-body {
+  flex: 1;
+}
+
+.step-body h3 {
+  font-size: 1.05rem;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.step-body p {
+  color: #4a5568;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+/* 表格 */
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 0.88rem;
+}
+
+.guide-table th,
+.guide-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.guide-table th {
+  background: #edf2f7;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.guide-table td {
+  color: #4a5568;
+}
+
+/* 公式框 */
+.formula-box {
+  background: #edf2f7;
+  border-left: 3px solid #2b6cb0;
+  padding: 10px 14px;
+  margin: 10px 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.formula-box.highlight-blue {
+  border-left-color: #2b6cb0;
+  background: #ebf4ff;
+}
+
+.formula-box.highlight-red {
+  border-left-color: #c53030;
+  background: #fff5f5;
+}
+
+.formula-box.highlight-green {
+  border-left-color: #276749;
+  background: #f0fff4;
+}
+
+.formula {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.95rem;
+  color: #2d3748;
+  padding: 4px 0;
+}
+
+.formula-lg {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2d3748;
+  padding: 6px 0;
+}
+
+.indent {
+  padding-left: 20px;
+}
+
+.calc-tip {
+  background: #fffff0;
+  border: 1px solid #f6e05e;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  color: #744210;
+  margin-top: 8px;
+}
+
+.calc-result-ref {
+  font-size: 0.85rem;
+  color: #718096;
+  font-style: italic;
+  margin-top: 6px;
+}
+
+/* 流程图 */
+.process-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.flow-item {
+  background: #2b6cb0;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.flow-item small {
+  display: block;
+  font-size: 0.73rem;
+  opacity: 0.8;
+}
+
+.flow-arrow {
+  font-size: 1.3rem;
+  color: #2b6cb0;
+  font-weight: 700;
+}
+
+/* 列表 */
+.guide-list {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.guide-list li {
+  color: #4a5568;
+  font-size: 0.9rem;
+  line-height: 1.8;
+}
+
+.guide-summary {
+  background: linear-gradient(135deg, #ebf4ff 0%, #f0fff4 100%);
+  border: 2px solid #2b6cb0;
+  border-radius: 10px;
+  padding: 22px;
+  margin-top: 10px;
+}
+
+.guide-summary h3 {
+  color: #2d3748;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+}
+
+.guide-summary p {
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+
+.guide-summary ol {
+  padding-left: 20px;
+}
+
+.guide-summary ol li {
+  color: #4a5568;
+  line-height: 1.8;
+}
+
+/* ========== 设备选型建议 ========== */
+.selection-panel {
+  min-height: 300px;
+}
+
+.selection-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 15px;
+}
+
+.selection-card {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  transition: box-shadow 0.3s;
+}
+
+.selection-card:hover {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.selection-card h4 {
+  color: #2d3748;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.selection-card p {
+  color: #4a5568;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.selection-card .spec-value {
+  font-weight: 600;
+  color: #2b6cb0;
+}
+
+/* ========== 品牌推荐与型号样本 ========== */
+.brand-selection-section {
+  margin-top: 20px;
+}
+.brand-selection-section > h3 {
+  font-size: 1.1rem;
+  color: #2d3748;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #3182ce;
+}
+.brand-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.brand-item h4 {
+  color: #2d3748;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.brand-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+}
+.brand-table thead {
+  background: #edf2f7;
+}
+.brand-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #2d3748;
+  border-bottom: 2px solid #cbd5e0;
+}
+.brand-table td {
+  padding: 8px 10px;
+  color: #4a5568;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+.brand-table tbody tr:hover {
+  background: #f7fafc;
+}
+.brand-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.selection-tip {
+  background: #fffbeb;
+  border-left: 3px solid #ed8936;
+  padding: 10px 14px;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: #744210;
+  line-height: 1.6;
+}
+.selection-tip ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.selection-tip li {
+  margin-bottom: 4px;
+}
+
+/* ========== 安装集成与布局指南 ========== */
+.installation-section {
+  margin-top: 24px;
+}
+.installation-section > h3 {
+  font-size: 1.1rem;
+  color: #2d3748;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #38a169;
+}
+.install-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.install-item h4 {
+  color: #2d3748;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.install-detail {
+  font-size: 0.82rem;
+  color: #4a5568;
+  line-height: 1.7;
+}
+.install-detail p {
+  margin: 8px 0 4px;
+}
+.install-detail ol, .install-detail ul {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+.install-detail li {
+  margin-bottom: 4px;
+}
+
+/* 气流布局流程图 */
+.layout-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 12px;
+  background: #f0fff4;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #fff;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  padding: 8px 6px;
+  min-width: 70px;
+  text-align: center;
+}
+.flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: #48bb78;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.flow-name {
+  font-size: 0.72rem;
+  color: #276749;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.flow-name small {
+  font-weight: 400;
+  color: #718096;
+}
+.flow-arrow {
+  font-size: 1.2rem;
+  color: #48bb78;
+  font-weight: 700;
+}
+
+/* 安装提示 */
+.install-tip {
+  background: #fffbeb;
+  border-left: 3px solid #ed8936;
+  padding: 10px 14px;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: #744210;
+  line-height: 1.6;
+}
+.install-tip ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.install-tip li {
+  margin-bottom: 4px;
+}
+
+/* 管路/电气连接图 */
+.pipe-diagram, .wire-diagram {
+  background: #ebf8ff;
+  border-left: 3px solid #4299e1;
+  padding: 8px 12px;
+  margin: 6px 0;
+  font-size: 0.78rem;
+  color: #2c5282;
+  border-radius: 0 4px 4px 0;
+  font-family: 'Consolas', 'Courier New', monospace;
+  line-height: 1.5;
+}
+.wire-diagram {
+  background: #faf5ff;
+  border-left-color: #9f7aea;
+  color: #553c9a;
+}
+
+/* 控制柜布局 */
+.cabinet-layout {
+  margin: 10px 0;
+}
+.cabinet-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  background: #f7fafc;
+}
+.cabinet-label {
+  font-weight: 700;
+  color: #2d3748;
+  min-width: 50px;
+  font-size: 0.8rem;
+}
+.cabinet-content {
+  color: #4a5568;
+  font-size: 0.8rem;
+}
+
+/* I/O 分配表 */
+.io-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin: 10px 0;
+}
+.io-table thead {
+  background: #edf2f7;
+}
+.io-table th {
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #2d3748;
+  border-bottom: 2px solid #cbd5e0;
+}
+.io-table td {
+  padding: 6px 8px;
+  color: #4a5568;
+  border-bottom: 1px solid #e2e8f0;
+}
+.io-table tbody tr:hover {
+  background: #f7fafc;
+}
+
+/* 控制逻辑 */
+.control-logic {
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 10px 0;
+}
+.control-logic p {
+  margin: 4px 0;
+  font-size: 0.8rem;
+}
+.control-logic ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.control-logic li {
+  margin-bottom: 3px;
+  font-size: 0.8rem;
+}
+
+/* 系统整体连接关系图 */
+.system-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.diagram-block {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+}
+.diagram-block h5 {
+  font-size: 0.85rem;
+  color: #2d3748;
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.diagram-block p {
+  font-size: 0.8rem;
+  color: #4a5568;
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+/* ========== 工艺流程图 ========== */
+.process-flow-container {
+  width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+}
+.process-flow-svg {
+  width: 100%;
+  min-width: 800px;
+  height: auto;
+}
+
+/* ========== 底部状态栏 ========== */
+.status-bar {
+  background: #f7fafc;
+  padding: 10px 20px;
+  font-size: 0.82rem;
+  color: #718096;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ========== 响应式 ========== */
+@media (max-width: 900px) {
+  main.two-col {
+    grid-template-columns: 1fr;
+  }
+  .guide-step {
+    flex-direction: column;
+  }
+  .process-flow {
+    justify-content: center;
+  }
+  .selection-grid {
+    grid-template-columns: 1fr;
+  }
+}/* ===========================
+   Tutorial / 教学翻页模式
+   =========================== */
+
+/* 进度条 */
+.tutorial-progress {
+  margin: 16px 0 12px;
+}
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4299e1, #3182ce);
+  transition: width 0.4s ease;
+  border-radius: 4px;
+}
+.progress-text {
+  display: block;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #718096;
+  margin-top: 6px;
+}
+
+/* 步骤圆点导航 */
+.step-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 16px;
+  flex-wrap: wrap;
+}
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cbd5e0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+.dot:hover {
+  background: #a0aec0;
+  transform: scale(1.2);
+}
+.dot.active {
+  background: #3182ce;
+  border-color: #bee3f8;
+  box-shadow: 0 0 6px rgba(49, 130, 206, 0.4);
+}
+
+/* 教学卡片 */
+.tutorial-slide {
+  min-height: 380px;
+  position: relative;
+}
+.tutorial-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* 教学章节分隔 */
+.tutorial-section {
+  padding: 18px 22px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.tutorial-section:last-child {
+  border-bottom: none;
+}
+.tutorial-section h3 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+  color: #2d3748;
+}
+
+/* 概念讲解区 */
+.concept-section {
+  background: #f7fafc;
+}
+.concept-section p {
+  line-height: 1.7;
+  color: #4a5568;
+  font-size: 0.92rem;
+}
+.why-box {
+  background: #ebf8ff;
+  border-left: 4px solid #3182ce;
+  padding: 12px 16px;
+  margin-top: 12px;
+  border-radius: 0 6px 6px 0;
+}
+.why-box strong {
+  color: #2b6cb0;
+  font-size: 0.88rem;
+}
+.why-box p {
+  font-size: 0.86rem;
+  color: #4a5568;
+  margin: 6px 0 0;
+}
+
+/* 公式区 */
+.formula-section {
+  background: #fff;
+}
+.tutorial-formula-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.tutorial-formula-table th {
+  background: #edf2f7;
+  padding: 8px 10px;
+  text-align: left;
+  color: #2d3748;
+  font-weight: 600;
+}
+.tutorial-formula-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+.tutorial-formula-table td:first-child {
+  font-weight: 600;
+  color: #2d3748;
+  white-space: nowrap;
+  width: 22%;
+}
+.tutorial-formula-table td:nth-child(2) {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #2b6cb0;
+  width: 38%;
+}
+.tutorial-formula-table td:nth-child(3) {
+  color: #718096;
+  font-size: 0.82rem;
+}
+
+/* 设计要点区 */
+.tip-section {
+  background: #fffff0;
+}
+.tip-section p {
+  color: #744210;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* 标准引用区 */
+.standards-section {
+  background: #f0fff4;
+  border-top: 1px solid #c6f6d5;
+}
+.standards-section p {
+  color: #276749;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* 翻页按钮 */
+.tutorial-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  gap: 12px;
+}
+.nav-btn {
+  padding: 10px 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.nav-btn:first-child {
+  background: #edf2f7;
+  color: #4a5568;
+}
+.nav-btn:first-child:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+.nav-btn:last-child {
+  background: #3182ce;
+  color: #fff;
+}
+.nav-btn:last-child:hover:not(:disabled) {
+  background: #2b6cb0;
+}
+.nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .tutorial-formula-table td {
+    display: block;
+    padding: 4px 10px;
+  }
+  .tutorial-formula-table td:first-child {
+    width: auto;
+    padding-top: 8px;
+  }
+  .tutorial-formula-table td:last-child {
+    padding-bottom: 8px;
+    border-bottom: none;
+  }
+  .tutorial-formula-table tr {
+    border-bottom: 1px solid #e2e8f0;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .nav-btn {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+  }
+}
+
+/* ==========================================
+   v2.0 新增样式
+   ========================================== */
+
+/* ==========================================
+   v3.0 新增样式 - 设计指南优化版
+   ========================================== */
+
+/* 模块标签切换 */
+.guide-module-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.module-tab {
+  padding: 8px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.module-tab:hover {
+  background: #edf2f7;
+  transform: translateY(-1px);
+}
+.module-tab.active {
+  background: #3182ce;
+  color: #fff;
+  border-color: #3182ce;
+}
+
+/* 指南主布局（左主内容 + 右侧边栏） */
+.guide-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* 侧边栏 */
+.guide-sidebar {
+  position: sticky;
+  top: 0;
+}
+.sidebar-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.sidebar-section h3 {
+  font-size: 0.92rem;
+  color: #2d3748;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* 扩展阅读链接 */
+.reading-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reading-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #4a5568;
+  font-size: 0.82rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.reading-link:hover {
+  background: #ebf8ff;
+  border-color: #90cdf4;
+  transform: translateX(3px);
+}
+.reading-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.reading-title {
+  flex: 1;
+  line-height: 1.3;
+}
+.reading-arrow {
+  color: #a0aec0;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* 快速跳转 */
+.quick-jump {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.quick-jump-group {
+  margin-bottom: 10px;
+}
+.quick-jump-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #718096;
+  padding: 4px 0;
+  margin-bottom: 2px;
+}
+.quick-jump-item {
+  display: block;
+  padding: 5px 8px;
+  font-size: 0.76rem;
+  color: #4a5568;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.15s;
+  line-height: 1.3;
+  margin-bottom: 1px;
+}
+.quick-jump-item:hover {
+  background: #edf2f7;
+  color: #2b6cb0;
+}
+.quick-jump-item.active {
+  background: #ebf8ff;
+  color: #2b6cb0;
+  font-weight: 600;
+  border-left: 2px solid #3182ce;
+}
+
+/* 常见误区区域 */
+.misconception-section {
+  background: #fff5f5;
+  border-top: 1px solid #fed7d7;
+}
+.misconception-section h3 {
+  color: #c53030;
+}
+.misconception-section p {
+  color: #742a2a;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+/* 知识库布局 */
+.knowledge-panel {
+  padding: 30px;
+}
+.knowledge-panel h2 {
+  font-size: 1.3rem;
+  color: #2d3748;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #2b6cb0;
+  padding-bottom: 10px;
+}
+.knowledge-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  min-height: 500px;
+}
+.knowledge-toc {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+.knowledge-category {
+  margin-bottom: 14px;
+}
+.knowledge-category-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2d3748;
+  padding: 6px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.knowledge-toc-item {
+  display: block;
+  padding: 5px 8px;
+  font-size: 0.8rem;
+  color: #4a5568;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.15s;
+  margin-bottom: 1px;
+}
+.knowledge-toc-item:hover {
+  background: #edf2f7;
+  color: #2b6cb0;
+}
+.knowledge-toc-item.active {
+  background: #ebf8ff;
+  color: #2b6cb0;
+  font-weight: 600;
+  border-left: 2px solid #3182ce;
+}
+.knowledge-content {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+.knowledge-content h3 {
+  font-size: 1.05rem;
+  color: #2d3748;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.knowledge-content h3:first-child {
+  margin-top: 0;
+}
+.knowledge-content p {
+  color: #4a5568;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+.knowledge-content ul {
+  margin: 6px 0 10px 20px;
+  color: #4a5568;
+  font-size: 0.88rem;
+  line-height: 1.8;
+}
+.knowledge-content ul li {
+  margin-bottom: 3px;
+}
+.knowledge-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 0.85rem;
+}
+.knowledge-content table th,
+.knowledge-content table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  text-align: left;
+}
+.knowledge-content table th {
+  background: #edf2f7;
+  font-weight: 600;
+  color: #2d3748;
+}
+.knowledge-content table td {
+  color: #4a5568;
+}
+
+/* 响应式适配 */
+@media (max-width: 1000px) {
+  .guide-layout {
+    grid-template-columns: 1fr;
+  }
+  .guide-sidebar {
+    position: static;
+  }
+  .knowledge-layout {
+    grid-template-columns: 1fr;
+  }
+  .knowledge-toc {
+    max-height: 200px;
+  }
+}
+
+/* 信息图标 (tooltip) */
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #4a5568;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: help;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: all 0.2s;
+}
+.info-icon:hover {
+  background: #3182ce;
+  color: #fff;
+}
+
+/* 工况预设按钮组 */
+.preset-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+.preset-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5568;
+  white-space: nowrap;
+}
+.preset-btn {
+  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  background: #fff;
+  color: #4a5568;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.preset-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.preset-btn.summer {
+  border-color: #fc8181;
+  color: #c53030;
+}
+.preset-btn.summer:hover {
+  background: #fff5f5;
+}
+.preset-btn.winter {
+  border-color: #90cdf4;
+  color: #2b6cb0;
+}
+.preset-btn.winter:hover {
+  background: #ebf8ff;
+}
+.preset-btn.standard {
+  border-color: #68d391;
+  color: #276749;
+}
+.preset-btn.standard:hover {
+  background: #f0fff4;
+}
+
+/* 实时计算开关 */
+.auto-calc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 8px 14px;
+  background: #fffbeb;
+  border-radius: 8px;
+  border: 1px solid #f6e05e;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #744210;
+}
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.toggle-hint {
+  font-size: 0.78rem;
+  color: #a0aec0;
+}
+
+/* 空气状态参数汇总表 */
+.air-state-summary {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px dashed #e2e8f0;
+}
+.air-state-summary h3 {
+  font-size: 0.95rem;
+  color: #4a5568;
+  margin-bottom: 10px;
+}
+.air-state-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+}
+.air-state-table caption {
+  font-weight: 600;
+  color: #2d3748;
+  text-align: left;
+  padding: 6px 0;
+  font-size: 0.85rem;
+}
+.air-state-table th {
+  background: #edf2f7;
+  padding: 7px 10px;
+  text-align: center;
+  color: #2d3748;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+}
+.air-state-table td {
+  padding: 6px 10px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  color: #4a5568;
+  font-size: 0.81rem;
+}
+.air-state-table td.param-name {
+  text-align: left;
+  font-weight: 500;
+  color: #2d3748;
+  background: #f7fafc;
+}
+.air-state-table td.highlight {
+  color: #2b6cb0;
+  font-weight: 600;
+}
+
+/* 标准引用标签 */
+.standards-ref {
+  background: #f0fff4;
+  border: 1px solid #9ae6b4;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: 0.83rem;
+  color: #276749;
+  line-height: 1.6;
+}
+.standards-ref strong {
+  color: #22543d;
+}
+.standards-ref ul {
+  margin: 4px 0 0 16px;
+}
+.standards-ref li {
+  margin-bottom: 2px;
+  font-size: 0.8rem;
+}
+
+/* 物理意义说明 */
+.physical-meaning {
+  background: #f0fff4;
+  border-left: 3px solid #48bb78;
+  padding: 6px 10px;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #276749;
+  border-radius: 0 4px 4px 0;
+}
+
+/* 核心参数物理意义与工程设计经验 */
+.physics-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 16px 0;
+}
+.physics-section h3 {
+  font-size: 1.1rem;
+  color: #2d3748;
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #3182ce;
+}
+.physics-item {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.physics-item:last-child {
+  margin-bottom: 0;
+}
+.physics-item h4 {
+  font-size: 0.95rem;
+  color: #2b6cb0;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.physics-def {
+  background: #ebf8ff;
+  border-left: 3px solid #4299e1;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  color: #2c5282;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.6;
+}
+.physics-meaning {
+  background: #f0fff4;
+  border-left: 3px solid #48bb78;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  color: #276749;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.6;
+}
+.engineering-exp {
+  background: #fffaf0;
+  border-left: 3px solid #ed8936;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  color: #c05621;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.6;
+}
+.engineering-exp ul {
+  margin: 4px 0 0 18px;
+  padding: 0;
+}
+.engineering-exp li {
+  margin-bottom: 4px;
+}
+
+/* 打印样式 */
+@media print {
+  body {
+    background: white;
+    padding: 0;
+  }
+  .container {
+    box-shadow: none;
+    max-width: 100%;
+  }
+  .tab-bar, .preset-group, .auto-calc-toggle, .button-group,
+  .tutorial-nav, .step-dots, .tutorial-progress, .status-bar,
+  .output-toolbar, .psychro-chart-container {
+    display: none !important;
+  }
+  .tab-content {
+    display: block !important;
+  }
+  .two-col {
+    grid-template-columns: 1fr !important;
+  }
+  .calc-process {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* 输出工具栏 */
+.output-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.toolbar-btn {
+  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f7fafc;
+  color: #4a5568;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.toolbar-btn:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+/* 焓湿图 */
+.psychro-chart-container {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px dashed #e2e8f0;
+}
+.psychro-chart-container h3 {
+  font-size: 0.95rem;
+  color: #4a5568;
+  margin-bottom: 4px;
+}
+.chart-explanation {
+  font-size: 0.78rem;
+  color: #a0aec0;
+  margin-bottom: 10px;
+}
+.psychro-chart-container canvas {
+  width: 100%;
+  max-width: 600px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  display: block;
+}
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #4a5568;
+  flex-wrap: wrap;
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  vertical-align: middle;
+}
+.legend-dot.inlet {
+  background: #3182ce;
+  border-color: #2b6cb0;
+}
+.legend-dot.outlet {
+  background: #48bb78;
+  border-color: #38a169;
+}
+.legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 3px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.legend-line.process {
+  background: #e53e3e;
+}
+.legend-line.sat {
+  background: #a0aec0;
+}

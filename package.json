@@ -1,0 +1,47 @@
+{
+  "name": "turbocharger-ahu-calculator",
+  "version": "1.0.0",
+  "description": "涡轮增压器测试台进气空调 (AHU) 设计计算器",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "npx electron-builder --win portable"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.turbocharger.ahu.calculator",
+    "productName": "进气空调设计计算器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "renderer.js",
+      "calculations.js",
+      "tutorial.js",
+      "styles.css",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": null,
+      "signAndEditExecutable": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
