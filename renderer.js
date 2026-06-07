@@ -3892,6 +3892,113 @@ function exportQaChat() {
   }
 }
 
+function getCurrentContext() {
+  var ctx = '';
+  try {
+    var mf = document.getElementById('massFlow');
+    if (mf) {
+      ctx += '===== 当前计算工况 =====\n';
+      ctx += '质量流量: ' + (parseFloat(mf.value) || '-') + ' kg/s\n';
+      ctx += '入口温度: ' + (parseFloat(document.getElementById('tempIn').value) || '-') + ' ℃\n';
+      ctx += '入口湿度: ' + (parseFloat(document.getElementById('rhIn').value) || '-') + ' %\n';
+      ctx += '出口温度: ' + (parseFloat(document.getElementById('tempOut').value) || '-') + ' ℃\n';
+      ctx += '出口湿度: ' + (parseFloat(document.getElementById('rhOut').value) || '-') + ' %\n';
+      ctx += '大气压力: ' + (parseFloat(document.getElementById('atmPressure').value) || '-') + ' kPa\n';
+      var results = document.querySelectorAll('#results .result-item');
+      if (results.length > 0) {
+        ctx += '\n===== 当前计算结果 =====\n';
+        for (var ri = 0; ri < results.length; ri++) {
+          ctx += results[ri].querySelector('.result-label').textContent + ': ' +
+            results[ri].querySelector('.result-value').textContent + '\n';
+        }
+      }
+    }
+  } catch (e) { ctx += '\n(无法获取当前工况参数)\n'; }
+  return ctx;
+}
+
+function sendToAi() {
+  var input = document.getElementById('qaInput');
+  var question = input.value.trim();
+  if (!question) {
+    alert('请先输入您的问题');
+    return;
+  }
+
+  var context = getCurrentContext();
+  var now = new Date();
+  var ts = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate()) +
+    ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+
+  var content = '===== AHU 设计计算助手 - 问题提交 =====\n';
+  content += '时间: ' + ts + '\n\n';
+  content += '问题: ' + question + '\n\n';
+  content += context;
+  content += '\n===== 结束 =====\n';
+  content += '请针对以上问题进行详细的解答，包含公式、标准引用和设计经验。';
+
+  // 保存到文件 (Electron)
+  try {
+    require('electron');
+    var { ipcRenderer } = require('electron');
+    var fileName = 'AHU_问题_' + now.getFullYear() + pad2(now.getMonth() + 1) + pad2(now.getDate()) +
+      '_' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.txt';
+    ipcRenderer.send('save-excel-file', { content: content, fileName: fileName });
+    ipcRenderer.once('save-excel-reply', function(event, reply) {
+      if (reply.success) {
+        document.getElementById('statusText').textContent = '问题已保存至: ' + reply.path;
+      } else {
+        copyToClipboard(content);
+        document.getElementById('statusText').textContent = '问题已复制到剪贴板（保存失败）';
+      }
+    });
+  } catch (e) {
+    // 浏览器环境: 复制到剪贴板
+    copyToClipboard(content);
+    document.getElementById('statusText').textContent = '问题已复制到剪贴板，请粘贴发送给AI助手';
+  }
+
+  // 同时添加到聊天记录
+  var messages = document.getElementById('qaMessages');
+  messages.appendChild(buildMessage('user', question +
+    '<div style="font-size:0.75rem;color:#a0aec0;margin-top:4px;">📤 已发送给 AI 助手，等待回复...</div>'));
+  input.value = '';
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function copyToClipboard(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+function importAiAnswer() {
+  var answer = prompt('请粘贴 AI 助手的回复内容（支持 HTML 格式）:');
+  if (!answer || !answer.trim()) return;
+
+  var messages = document.getElementById('qaMessages');
+  // 获取最后一条用户消息作为问题引用
+  var allMsgs = messages.querySelectorAll('.qa-message.qa-user');
+  var lastQuestion = '';
+  if (allMsgs.length > 0) {
+    var lastBubble = allMsgs[allMsgs.length - 1].querySelector('.qa-bubble');
+    if (lastBubble) lastQuestion = lastBubble.textContent.replace(/📤.*/, '').trim();
+  }
+
+  var formattedAnswer = '<div style="font-size:0.82rem;color:#718096;margin-bottom:6px;">🤖 AI 助手回复' +
+    (lastQuestion ? ' — 关于: "' + lastQuestion.slice(0, 30) + (lastQuestion.length > 30 ? '...' : '') + '"' : '') +
+    '</div>' + answer.replace(/\n/g, '<br>');
+
+  messages.appendChild(buildMessage('bot', formattedAnswer));
+  messages.scrollTop = messages.scrollHeight;
+  document.getElementById('statusText').textContent = 'AI 回答已导入';
+}
+
 function initQuickTags() {
   var tags = [
     '制冷量怎么算',

@@ -2000,3 +2000,35 @@ button {
   background: #c6f6d5;
   border-color: #68d391;
 }
+
+.qa-ai-btn {
+  padding: 8px 14px;
+  background: #faf5ff;
+  color: #6b46c1;
+  border: 1px solid #d6bcfa;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qa-ai-btn:hover {
+  background: #e9d8fd;
+  border-color: #b794f4;
+}
+
+.qa-import-btn {
+  padding: 8px 14px;
+  background: #fffff0;
+  color: #744210;
+  border: 1px solid #f6e05e;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qa-import-btn:hover {
+  background: #fefcbf;
+  border-color: #ecc94b;
+}
