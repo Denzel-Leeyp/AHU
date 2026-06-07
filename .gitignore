@@ -6,7 +6,9 @@ dist/
 release/
 win-unpacked/
 .builder-cache/
-release/
+build_output/
+*.rar
+*.zip
 
 # Environment & logs
 debug.log
