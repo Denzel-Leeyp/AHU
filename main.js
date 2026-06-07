@@ -65,6 +65,43 @@ ipcMain.on("save-svg-file", (event, { content, fileName }) => {
   });
 });
 
+// 渲染进程请求生成PDF文件
+ipcMain.on("save-pdf-file", async (event, { svgContent, fileName }) => {
+  const pdfFileName = fileName.replace(/\.\w+$/, "") + ".pdf";
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "保存工程图(PDF)",
+    defaultPath: path.join(app.getPath("desktop"), pdfFileName),
+    filters: [{ name: "PDF文件", extensions: ["pdf"] }]
+  });
+  if (result.canceled || !result.filePath) return;
+
+  try {
+    const tempHtmlPath = path.join(app.getPath("temp"), "ahu_pdf_export.html");
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+      '* { margin:0; padding:0; box-sizing:border-box; }' +
+      'body { display:flex; justify-content:center; align-items:center; min-height:100vh; background:#fff; }' +
+      'svg { max-width:100%; max-height:100vh; }' +
+      '</style></head><body>' + svgContent + '</body></html>';
+    fs.writeFileSync(tempHtmlPath, html, "utf8");
+
+    const pdfWindow = new BrowserWindow({ show: false, width: 1200, height: 800 });
+    await pdfWindow.loadFile(tempHtmlPath);
+    const pdfBuffer = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      landscape: true,
+      pageSize: "A4",
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    pdfWindow.close();
+    fs.unlinkSync(tempHtmlPath);
+
+    fs.writeFileSync(result.filePath, pdfBuffer);
+    event.sender.send("save-pdf-reply", { success: true, path: result.filePath });
+  } catch (err) {
+    event.sender.send("save-pdf-reply", { success: false, error: err.message });
+  }
+});
+
 app.whenReady().then(createWindow);
 
 app.on("window-all-closed", function () {

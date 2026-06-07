@@ -354,19 +354,260 @@ function buildProcessSteps(data) {
     '</div>'
   );
 
+  // 步骤7: 空气密度与体积流量
+  var T_in_K = data.tempIn + 273.15;
+  var rho = data.P_atm / (0.287 * T_in_K);
+  var Qv = data.massFlow / rho;
+  var Qv_m3h = Qv * 3600;
+  steps.push(
+    '<div class="step-item">' +
+    '<div class="step-title">步骤 7：空气密度与体积流量计算</div>' +
+    '<div class="step-formula">空气密度 ρ = P_atm / (R × T₁) = ' + fmt(data.P_atm, 3) + ' / (0.287 × ' + fmt(T_in_K, 2) + ')</div>' +
+    '<div class="step-result">空气密度 ρ = ' + fmt(rho, 4) + ' kg/m³</div>' +
+    '<div class="physical-meaning">含义：空气密度随温度和气压变化。R = 0.287 kJ/(kg·K) 为干空气气体常数。<br>依据 GB/T 35226-2017《湿空气性质计算公式》</div>' +
+    '<div class="step-formula">体积流量 Q_v = ṁ / ρ = ' + fmt(data.massFlow, 2) + ' / ' + fmt(rho, 4) + '</div>' +
+    '<div class="step-result">体积流量 Q_v = ' + fmt(Qv, 4) + ' m³/s = ' + fmt(Qv_m3h, 0) + ' m³/h</div>' +
+    '<div class="physical-meaning">含义：每秒需要处理约 ' + fmt(Qv, 2) + ' 立方米空气，这是确定 AHU 截面尺寸的基础参数</div>' +
+    '<div class="engineering-exp"><strong>行业经验：</strong>质量流量与体积流量的关系受空气密度影响。</div>' +
+    '<div class="step-formula">换算关系：1 m³/s ≈ 3600 m³/h</div>' +
+    '</div>'
+  );
+
+  // 步骤8: 各功能段截面尺寸计算
+  var secInfo = [
+    { name: '初效过滤器段', vel: data.v_filter, area: data.sec_filter.area, sec: data.sec_filter, len: data.len_filter, std: 'GB/T 14294-2008', note: '过滤器迎面风速宜为 2.0~2.5 m/s，过高则阻力大、过滤效率低' },
+    { name: '表冷器段', vel: data.v_coil, area: data.sec_coil.area, sec: data.sec_coil, len: data.len_coil, std: 'GB/T 14294-2008', note: '表冷器迎面风速宜为 2.0~2.5 m/s，除湿工况取小值，保证表冷器表面温度低于露点' },
+    { name: '电加热器段', vel: data.v_heater, area: data.sec_heater.area, sec: data.sec_heater, len: data.len_heater, std: 'GB 50019-2015', note: '加热器段迎面风速宜为 2.5~3.0 m/s，风速过高导致加热不均匀' },
+    { name: '加湿器段', vel: data.v_humidifier, area: data.sec_humidifier.area, sec: data.sec_humidifier, len: data.len_humidifier, std: 'GB/T 14294-2008', note: '加湿器迎面风速宜为 2.0~2.5 m/s，确保水蒸气充分混合' },
+    { name: '风机段', vel: data.v_fan_outlet, area: data.sec_fan.area, sec: data.sec_fan, len: data.len_fan, std: 'GB 50019-2015', note: '风机出口风速 3~5 m/s，出风口风速控制 4~6 m/s，过高产生噪音' },
+    { name: '出风口段', vel: data.v_outlet, area: data.sec_outlet.area, sec: data.sec_outlet, len: 0.3, std: 'GB 50019-2015', note: '出风口风速 4~6 m/s，与测试台进风口对接' }
+  ];
+
+  var secHtml = '<div class="step-item">' +
+    '<div class="step-title">步骤 8：各功能段截面尺寸计算</div>' +
+    '<div class="step-formula">各段截面积 A = Q_v / v，宽高比 λ = 1.5（推荐值）</div>' +
+    '<div class="step-formula">宽度 W = √(A × λ)，高度 H = A / W</div>' +
+    '<div class="physical-meaning">含义：宽高比 1.5 为 AHU 常用比例，兼顾安装空间和气流均匀性</div>' +
+    '<table class="air-state-table" style="margin-top:8px;">' +
+    '<tr><th>功能段</th><th>推荐风速 m/s</th><th>截面积 m²</th><th>宽度 mm</th><th>高度 mm</th><th>段长 m</th><th>引用标准</th></tr>';
+
+  for (var si = 0; si < secInfo.length; si++) {
+    var si_data = secInfo[si];
+    secHtml += '<tr>' +
+      '<td class="param-name">' + si_data.name + '</td>' +
+      '<td class="highlight">' + fmt(si_data.vel, 1) + '</td>' +
+      '<td>' + fmt(si_data.area, 3) + '</td>' +
+      '<td class="highlight">' + fmt(si_data.sec.w * 1000, 0) + '</td>' +
+      '<td class="highlight">' + fmt(si_data.sec.h * 1000, 0) + '</td>' +
+      '<td>' + fmt(si_data.len, 1) + '</td>' +
+      '<td>' + si_data.std + '</td>' +
+      '</tr>';
+  }
+
+  secHtml += '<tr style="font-weight:bold;background:#edf2f7;">' +
+    '<td>合计</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="highlight">' + fmt(data.totalLength, 1) + ' m</td><td>-</td></tr>';
+  secHtml += '</table>';
+
+  secHtml += '<div class="engineering-exp"><strong>行业经验：</strong><ul>';
+  for (var si2 = 0; si2 < secInfo.length; si2++) {
+    secHtml += '<li>' + secInfo[si2].note + '</li>';
+  }
+  secHtml += '<li>AHU 总长度约为各功能段长度之和加上过渡段，过渡段长度一般取 1.0~1.5m</li>';
+  secHtml += '</ul></div></div>';
+
+  steps.push(secHtml);
+
+  // 步骤9: 箱体材料与结构设计
+  steps.push(
+    '<div class="step-item">' +
+    '<div class="step-title">步骤 9：箱体材料与结构设计</div>' +
+    '<div class="step-formula">箱体选型依据 GB/T 14294-2008《组合式空调机组》及行业经验</div>' +
+    '<table class="air-state-table" style="margin-top:8px;">' +
+    '<tr><th>部件</th><th>推荐规格</th><th>标准依据</th><th>设计理由</th></tr>' +
+    '<tr><td class="param-name">外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td><td>耐腐蚀、强度高、易清洁</td></tr>' +
+    '<tr><td class="param-name">保温层</td><td>聚氨酯 50mm (≥40kg/m³)</td><td>GB/T 21558-2008</td><td>导热系数 ≤0.024 W/(m·K)，防结露</td></tr>' +
+    '<tr><td class="param-name">内板</td><td>镀锌钢板 1.0mm</td><td>GB/T 2518-2019</td><td>光滑平整、减少风阻</td></tr>' +
+    '<tr><td class="param-name">框架</td><td>铝合金型材 40×40mm</td><td>GB/T 5237-2017</td><td>轻质高强、耐腐蚀</td></tr>' +
+    '<tr><td class="param-name">底座</td><td>槽钢 10# 热镀锌</td><td>GB/T 706-2016</td><td>承重 ≥ 500kg/m²</td></tr>' +
+    '<tr><td class="param-name">密封</td><td>硅酮胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>' +
+    '</table>' +
+    '<div class="physical-meaning">箱体漏风率 ≤ 1% 为 GB/T 14294-2008 要求，高精度测试台建议漏风率 ≤ 0.5%</div>' +
+    '<div class="engineering-exp"><strong>设计要点：</strong><ul>' +
+    '<li>箱体面板采用"三明治"结构：外板 1.5mm 304SS + 保温 50mm + 内板 1.0mm 镀锌板，用断冷桥铝型材连接</li>' +
+    '<li>AHU 底座高度 ≥ 150mm，方便底部接管和排水</li>' +
+    '<li>每个功能段设检修门 ≥ 600×600mm，带观察窗和 LED 照明</li>' +
+    '<li>表冷器段底部设不锈钢接水盘，坡度 ≥ 1%，排水管 DN32</li>' +
+    '<li>箱体强度应能承受 ±2000Pa 压力而不变形</li>' +
+    '</ul></div>' +
+    '</div>'
+  );
+
+  // 步骤10: 结构设计汇总
+  steps.push(
+    '<div class="step-item">' +
+    '<div class="step-title">步骤 10：AHU 结构设计汇总</div>' +
+    '<div class="step-result">AHU 总尺寸：' + fmt(data.sec_filter.w * 1000, 0) + 'mm (宽) × ' + fmt(data.sec_filter.h * 1000, 0) + 'mm (高) × ' + fmt(data.totalLength * 1000, 0) + 'mm (长)</div>' +
+    '<div class="step-result">处理风量：' + fmt(Qv_m3h, 0) + ' m³/h（' + fmt(Qv, 2) + ' m³/s）</div>' +
+    '<div class="step-result">气流方向：进风口 → 初效过滤器 → 表冷器 → 电加热器 → 加湿器 → 送风机 → 出风口</div>' +
+    '<div class="engineering-exp"><strong>设计总结：</strong><ul>' +
+    '<li>各功能段之间用隔板分隔，接缝处用硅酮密封胶密封，确保漏风率 ≤ 1%</li>' +
+    '<li>每段前后预留 ≥ 300mm 检修空间，方便更换过滤器和清洗表冷器</li>' +
+    '<li>风机段底部设弹簧减震器（4个），减少振动传递到箱体</li>' +
+    '<li>电气控制柜独立安装在 AHU 侧面或就近墙面，防护等级 IP54</li>' +
+    '</ul></div>' +
+    '</div>'
+  );
+
   // 标准引用
   steps.push(
     '<div class="standards-ref">' +
     '<strong>📋 引用标准：</strong>' +
     '<ul>' +
-    '<li>GB/T 35226-2017《湿空气性质计算公式》（Magnus 饱和水汽压公式）</li>' +
+    '<li>GB/T 35226-2017《湿空气性质计算公式》（Magnus 饱和水汽压公式、空气密度计算）</li>' +
     '<li>GB 50736-2012《民用建筑供暖通风与空气调节设计规范》（焓差法负荷计算）</li>' +
-    '<li>GB/T 14294-2008《组合式空调机组》（设备选型参考）</li>' +
+    '<li>GB/T 14294-2008《组合式空调机组》（设备选型、箱体结构、漏风率要求）</li>' +
+    '<li>GB 50019-2015《工业建筑供暖通风与空气调节设计规范》（风速选取、风管设计）</li>' +
+    '<li>GB/T 3280-2015《不锈钢冷轧钢板和钢带》（外板材料）</li>' +
+    '<li>GB/T 2518-2019《连续热镀锌钢板和钢带》（内板材料）</li>' +
+    '<li>GB/T 5237-2017《铝合金建筑型材》（框架材料）</li>' +
+    '<li>GB/T 21558-2008《建筑绝热用硬质聚氨酯泡沫塑料》（保温材料）</li>' +
+    '<li>GB/T 706-2016《热轧型钢》（底座槽钢）</li>' +
     '</ul>' +
     '</div>'
   );
 
   return steps.join("");
+}
+
+// ==========================================
+// 六-二、结构设计与布局计算
+// ==========================================
+
+function buildStructuralDesign(data) {
+  var s = data;
+  var secNames = ['初效过滤器段', '表冷器段', '电加热器段', '加湿器段', '风机段', '出风口段'];
+  var secs = [s.sec_filter, s.sec_coil, s.sec_heater, s.sec_humidifier, s.sec_fan, s.sec_outlet];
+  var vels = [s.v_filter, s.v_coil, s.v_heater, s.v_humidifier, s.v_fan_outlet, s.v_outlet];
+  var lens = [s.len_filter, s.len_coil, s.len_heater, s.len_humidifier, s.len_fan, 0.3];
+
+  var T_in_K = s.tempIn + 273.15;
+  var rho = s.P_atm / (0.287 * T_in_K);
+  var Qv = s.massFlow / rho;
+  var Qv_m3h = Qv * 3600;
+
+  var html = '<div class="physics-section">';
+  html += '<h3>🏗 结构设计与截面尺寸计算</h3>';
+
+  // ===== 1. 基本参数 =====
+  html += '<div class="physics-item">';
+  html += '<h4>📊 基本参数</h4>';
+  html += '<table class="air-state-table">';
+  html += '<tr><th>参数</th><th>数值</th><th>单位</th></tr>';
+  html += '<tr><td class="param-name">空气质量流量</td><td class="highlight">' + fmt(s.massFlow, 2) + '</td><td>kg/s</td></tr>';
+  html += '<tr><td class="param-name">空气密度</td><td class="highlight">' + fmt(rho, 4) + '</td><td>kg/m³</td></tr>';
+  html += '<tr><td class="param-name">体积流量</td><td class="highlight">' + fmt(Qv_m3h, 0) + ' m³/h = ' + fmt(Qv, 2) + ' m³/s</td><td>m³/h</td></tr>';
+  html += '<tr><td class="param-name">宽高比 λ</td><td>1.5（推荐值）</td><td>-</td></tr>';
+  html += '</table>';
+  html += '<div class="step-formula" style="margin-top:6px;">计算公式：ρ = P_atm / (R × T_abs) = ' + fmt(s.P_atm, 3) + ' / (0.287 × ' + fmt(T_in_K, 2) + ') = ' + fmt(rho, 4) + ' kg/m³</div>';
+  html += '<div class="step-formula">Q_v = ṁ / ρ = ' + fmt(s.massFlow, 2) + ' / ' + fmt(rho, 4) + ' = ' + fmt(Qv, 4) + ' m³/s = ' + fmt(Qv_m3h, 0) + ' m³/h</div>';
+  html += '<div class="physical-meaning">R = 0.287 kJ/(kg·K) 为干空气气体常数。依据 GB/T 35226-2017《湿空气性质计算公式》</div>';
+  html += '</div>';
+
+  // ===== 2. 各段截面尺寸及计算过程 =====
+  html += '<div class="physics-item">';
+  html += '<h4>📐 各功能段截面尺寸计算</h4>';
+  html += '<div class="step-formula">截面积 A = Q_v / v（v 为推荐面风速）</div>';
+  html += '<div class="step-formula">宽度 W = √(A × λ)，高度 H = A / W（λ = 宽高比 1.5）</div>';
+  html += '<table class="air-state-table">';
+  html += '<tr><th>段名称</th><th>面风速 (m/s)</th><th>截面积 (m²)</th><th>宽度 (mm)</th><th>高度 (mm)</th><th>段长 (m)</th></tr>';
+
+  var secExpNotes = [
+    '初效过滤器迎面风速 2.0~2.5 m/s，过高则阻力大、过滤效率低，过低则过滤器尺寸过大',
+    '表冷器迎面风速 2.0~2.5 m/s，除湿工况取小值，确保表冷器表面温度低于露点温度，有效除湿',
+    '电加热器迎面风速 2.5~3.0 m/s，过高导致加热不均匀，过低则加热器尺寸过大',
+    '加湿器迎面风速 2.0~2.5 m/s，确保水蒸气与空气充分混合，防止带水',
+    '风机出口风速 3.5~5.0 m/s，过高产生噪音和振动，过低则风管尺寸过大',
+    '出风口风速 4.0~6.0 m/s，与测试台进风口对接，需设软连接减振'
+  ];
+
+  for (var i = 0; i < secs.length; i++) {
+    var sec = secs[i];
+    html += '<tr>' +
+      '<td class="param-name">' + secNames[i] + '</td>' +
+      '<td class="highlight">' + fmt(vels[i], 1) + '</td>' +
+      '<td>' + fmt(sec.area, 3) + '</td>' +
+      '<td class="highlight">' + fmt(sec.w * 1000, 0) + '</td>' +
+      '<td class="highlight">' + fmt(sec.h * 1000, 0) + '</td>' +
+      '<td>' + fmt(lens[i], 1) + '</td>' +
+      '</tr>';
+  }
+
+  html += '<tr style="font-weight:bold;background:#edf2f7;">' +
+    '<td class="param-name">合计</td><td>-</td><td>-</td><td>-</td><td>-</td>' +
+    '<td class="highlight">' + fmt(s.totalLength, 1) + ' m</td></tr>';
+  html += '</table>';
+
+  html += '<div class="engineering-exp" style="margin-top:8px;"><strong>💡 设计依据与行业经验：</strong><ul>';
+  for (var ni = 0; ni < secExpNotes.length; ni++) {
+    html += '<li>' + secNames[ni] + '：' + secExpNotes[ni] + '</li>';
+  }
+  html += '<li>各段长度根据设备尺寸和维护空间确定：过滤器 500~600mm、表冷器 400~500mm、加热器 300~400mm、加湿器 500~600mm、风机段 800~1000mm</li>';
+  html += '<li>过渡段长度 1.0~1.5m，用于各功能段之间的连接和气流稳定</li>';
+  html += '<li>以上风速推荐值依据 GB/T 14294-2008《组合式空调机组》和 GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</li>';
+  html += '</ul></div>';
+  html += '</div>';
+
+  // ===== 3. AHU 整体布局 =====
+  html += '<div class="physics-item">';
+  html += '<h4>🔀 AHU 气流布局顺序（沿气流方向）</h4>';
+  html += '<div class="layout-flow">';
+  var flowSteps = ['进风口', '初效过滤器', '表冷器', '电加热器', '加湿器', '送风机', '出风口'];
+  for (var fi = 0; fi < flowSteps.length; fi++) {
+    html += '<div class="flow-step"><span class="flow-num">' + (fi + 1) + '</span><span class="flow-name">' + flowSteps[fi] + '</span></div>';
+    if (fi < flowSteps.length - 1) html += '<div class="flow-arrow">→</div>';
+  }
+  html += '</div>';
+  html += '<p style="font-size:0.85rem;color:#4a5568;margin-top:8px;"><strong>总长：</strong>' + fmt(s.totalLength, 1) + ' m  ×  <strong>截面：</strong>' + fmt(s.sec_filter.w * 1000, 0) + '×' + fmt(s.sec_filter.h * 1000, 0) + ' mm</p>';
+
+  // 计算各段累计长度（简化的气流动画数据）
+  html += '<div style="margin-top:10px;font-size:0.82rem;color:#4a5568;line-height:1.6;">';
+  html += '<strong>布局说明：</strong><br>';
+  html += '• 进风口设电动风阀（调节新风量）和防虫网<br>';
+  html += '• 初效过滤器 G4 袋式，前后设压差开关（≥250Pa 报警）<br>';
+  html += '• 表冷器设不锈钢接水盘（坡度 ≥1%），排水管 DN32 配存水弯（≥50mm）<br>';
+  html += '• 电加热器设超温保护开关（80℃切断），前后各 500mm 不得有易燃材料<br>';
+  html += '• 加湿器设在加热器之后，蒸汽分配管距上游 ≥500mm，距风机 ≥1000mm<br>';
+  html += '• 风机出口设帆布软连接（≥200mm）和消音器，底部设弹簧减震器<br>';
+  html += '• 出风口设手动调节阀，方便调试时调节风量<br>';
+  html += '• 每个功能段设检修门 ≥600×600mm，带观察窗和 LED 照明';
+  html += '</div>';
+  html += '</div>';
+
+  // ===== 4. 箱体材料规格 =====
+  html += '<div class="physics-item">';
+  html += '<h4>🧱 箱体材料规格与设计依据</h4>';
+  html += '<table class="air-state-table">';
+  html += '<tr><th>部件</th><th>规格</th><th>标准</th><th>设计理由</th></tr>';
+  html += '<tr><td class="param-name">外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td><td>耐腐蚀、易清洁、寿命长，适合实验室环境</td></tr>';
+  html += '<tr><td class="param-name">保温层</td><td>聚氨酯 50mm（≥40kg/m³）</td><td>GB/T 21558-2008</td><td>导热系数 ≤0.024 W/(m·K)，防结露、节能</td></tr>';
+  html += '<tr><td class="param-name">内板</td><td>镀锌钢板 1.0mm</td><td>GB/T 2518-2019</td><td>表面光滑、风阻小、反射辐射热</td></tr>';
+  html += '<tr><td class="param-name">框架</td><td>铝合金型材 40×40mm</td><td>GB/T 5237-2017</td><td>轻质高强、断冷桥设计，防腐免维护</td></tr>';
+  html += '<tr><td class="param-name">底座</td><td>槽钢 10# 热镀锌</td><td>GB/T 706-2016</td><td>承重 ≥500kg/m²，高度 ≥150mm 方便接管</td></tr>';
+  html += '<tr><td class="param-name">密封</td><td>硅酮胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤1%，高精度台 ≤0.5%</td></tr>';
+  html += '</table>';
+  html += '<div class="engineering-exp" style="margin-top:8px;"><strong>💡 箱体设计要点：</strong>' +
+    '<ul>' +
+    '<li>面板采用"三明治"断冷桥结构：外板 1.5mm 304SS + 保温 50mm PU + 内板 1.0mm 镀锌板</li>' +
+    '<li>箱体承受 ±2000Pa 压力不变形，满足 GB/T 14294-2008 强度要求</li>' +
+    '<li>50mm 聚氨酯保温层可防止在夏季工况箱体外表面结露（露点温度约 15~20℃）</li>' +
+    '<li>铝合金框架断冷桥设计，避免内外温差通过框架传导产生冷凝水</li>' +
+    '<li>箱体漏风率 ≤1% 为 GB/T 14294-2008 最低要求，精密测试台建议 ≤0.5%</li>' +
+    '<li>底座高度 ≥150mm，便于底部接管、排水管安装和清扫</li>' +
+    '</ul></div>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
 }
 
 // ==========================================
@@ -424,6 +665,42 @@ function calculate() {
   var m_chilled = Q_cooling > 0 ? Q_cooling / (Cp_water * 5) : 0;
   var elec_power = Q_heating > 0 ? Q_heating / 0.98 : 0;
 
+  // ---- 7.5. 空气流量与结构尺寸计算 ----
+  var T_abs_in = tempIn + 273.15;
+  var R_air = 0.287;
+  var rho_air = P_atm / (R_air * T_abs_in);
+  var volFlow = massFlow / rho_air;
+  var volFlow_m3h = volFlow * 3600;
+
+  var v_filter = 2.5;
+  var v_coil = 2.2;
+  var v_heater = 2.8;
+  var v_humidifier = 2.5;
+  var v_fan_outlet = 4.0;
+  var v_outlet = 5.0;
+
+  function calcWH(area, ar) {
+    var w = Math.sqrt(area * ar);
+    var h = area / w;
+    return { w: w, h: h, area: area };
+  }
+
+  var ar = 1.5;
+  var sec_filter = calcWH(volFlow / v_filter, ar);
+  var sec_coil = calcWH(volFlow / v_coil, ar);
+  var sec_heater = calcWH(volFlow / v_heater, ar);
+  var sec_humidifier = calcWH(volFlow / v_humidifier, ar);
+  var sec_fan = calcWH(volFlow / v_fan_outlet, ar);
+  var sec_outlet = calcWH(volFlow / v_outlet, ar);
+
+  var len_filter = 0.6;
+  var len_coil = 0.5;
+  var len_heater = 0.4;
+  var len_humidifier = 0.5;
+  var len_fan = 1.0;
+  var len_transition = 1.2;
+  var totalLength = len_filter + len_coil + len_heater + len_humidifier + len_fan + len_transition;
+
   // ---- 8. 收集数据 ----
   var data = {
     massFlow: massFlow,
@@ -433,7 +710,15 @@ function calculate() {
     P_sat_in: P_sat_in, P_v_in: P_v_in, W_in: W_in, h_in: h_in,
     P_sat_out: P_sat_out, P_v_out: P_v_out, W_out: W_out, h_out: h_out,
     Q_cooling: Q_cooling, Q_heating: Q_heating, m_dehumid: m_dehumid,
-    m_chilled: m_chilled, elec_power: elec_power
+    m_chilled: m_chilled, elec_power: elec_power,
+    volFlow: volFlow, volFlow_m3h: volFlow_m3h, rho_air: rho_air,
+    v_filter: v_filter, v_coil: v_coil, v_heater: v_heater, v_humidifier: v_humidifier,
+    v_fan_outlet: v_fan_outlet, v_outlet: v_outlet,
+    sec_filter: sec_filter, sec_coil: sec_coil, sec_heater: sec_heater,
+    sec_humidifier: sec_humidifier, sec_fan: sec_fan, sec_outlet: sec_outlet,
+    len_filter: len_filter, len_coil: len_coil, len_heater: len_heater,
+    len_humidifier: len_humidifier, len_fan: len_fan, len_transition: len_transition,
+    totalLength: totalLength
   };
 
   // ---- 9. 显示结果摘要 ----
@@ -443,7 +728,10 @@ function calculate() {
     '<div class="result-item"><span class="result-label">🔥 加热量</span><span class="result-value heating">' + fmt(Q_heating, 2) + ' kW</span></div>' +
     '<div class="result-item"><span class="result-label">💧 除湿量</span><span class="result-value dehumidify">' + fmt(m_dehumid, 2) + ' g/s</span></div>' +
     '<div class="result-item"><span class="result-label">🌡 冷冻水流量</span><span class="result-value">' + fmt(m_chilled, 3) + ' kg/s (' + fmt(V_c, 1) + ' m³/h)</span></div>' +
-    '<div class="result-item"><span class="result-label">🔥 电加热功率</span><span class="result-value">' + fmt(Q_heating / 0.98, 2) + ' kW</span></div>';
+    '<div class="result-item"><span class="result-label">🔥 电加热功率</span><span class="result-value">' + fmt(Q_heating / 0.98, 2) + ' kW</span></div>' +
+    '<div class="result-item"><span class="result-label">🌀 处理风量</span><span class="result-value">' + fmt(volFlow_m3h, 0) + ' m³/h</span></div>' +
+    '<div class="result-item"><span class="result-label">📐 建议截面</span><span class="result-value">' + fmt(sec_filter.w * 1000, 0) + '×' + fmt(sec_filter.h * 1000, 0) + ' mm</span></div>' +
+    '<div class="result-item"><span class="result-label">📏 总长度</span><span class="result-value">约 ' + fmt(totalLength, 1) + ' m</span></div>';
 
   // ---- 10. 空气状态参数汇总表 ----
   var summaryDiv = document.getElementById("airStateSummary");
@@ -466,6 +754,18 @@ function calculate() {
   var stepsDiv = document.getElementById("processSteps");
   stepsDiv.innerHTML = buildProcessSteps(data);
   processDiv.style.display = "block";
+
+  // ---- 11.5. 结构设计与布局 ----
+  var structDiv = document.getElementById("structuralDesign");
+  if (!structDiv) {
+    structDiv = document.createElement("div");
+    structDiv.id = "structuralDesign";
+    structDiv.className = "structural-design";
+    var airStateDiv = document.getElementById("airStateSummary");
+    airStateDiv.parentNode.insertBefore(structDiv, airStateDiv.nextSibling);
+  }
+  structDiv.innerHTML = buildStructuralDesign(data);
+  structDiv.style.display = "block";
 
   // ---- 12. 显示输出工具栏 ----
   document.getElementById("outputToolbar").style.display = "flex";
@@ -496,6 +796,8 @@ function resetDefaults() {
   var physicsDiv = document.getElementById("physicsExplanation");
   if (physicsDiv) physicsDiv.style.display = "none";
   document.getElementById("calcProcess").style.display = "none";
+  var structDiv = document.getElementById("structuralDesign");
+  if (structDiv) structDiv.style.display = "none";
   document.getElementById("outputToolbar").style.display = "none";
   document.getElementById("psychroChartContainer").style.display = "none";
   document.getElementById("selectionResults").innerHTML = '<p class="placeholder">请先在"参数计算"页面进行计算</p>';
@@ -2488,6 +2790,29 @@ function exportReport() {
   var face_width = Math.ceil(Math.sqrt(face_area * 1.5) * 100) / 100;
   var face_height = face_area / face_width;
 
+  // 结构尺寸参数
+  var T_abs_in = tempIn + 273.15;
+  var R_air = 0.287;
+  var rho_air = P_atm / (R_air * T_abs_in);
+  var volFlow = massFlow / rho_air;
+  var volFlow_m3h = volFlow * 3600;
+
+  function calcWH2(area, ar) {
+    var w = Math.sqrt(area * ar);
+    var h = area / w;
+    return { w: w, h: h, area: area };
+  }
+  var ar2 = 1.5;
+  var v_filter2 = 2.5, v_coil2 = 2.2, v_heater2 = 2.8, v_humidifier2 = 2.5, v_fan_outlet2 = 4.0, v_outlet2 = 5.0;
+  var sec_filter2 = calcWH2(volFlow / v_filter2, ar2);
+  var sec_coil2 = calcWH2(volFlow / v_coil2, ar2);
+  var sec_heater2 = calcWH2(volFlow / v_heater2, ar2);
+  var sec_humidifier2 = calcWH2(volFlow / v_humidifier2, ar2);
+  var sec_fan2 = calcWH2(volFlow / v_fan_outlet2, ar2);
+  var sec_outlet2 = calcWH2(volFlow / v_outlet2, ar2);
+  var len_filter2 = 0.6, len_coil2 = 0.5, len_heater2 = 0.4, len_humidifier2 = 0.5, len_fan2 = 1.0;
+  var totalLength2 = len_filter2 + len_coil2 + len_heater2 + len_humidifier2 + len_fan2 + 1.2;
+
   // 当前日期时间
   var now = new Date();
   var dateStr = now.getFullYear() + "-" + pad2(now.getMonth() + 1) + "-" + pad2(now.getDate());
@@ -2574,9 +2899,46 @@ function exportReport() {
   html += '<tr><td class="label">电热效率</td><td>η</td><td class="value">98</td><td>%</td></tr>';
   html += '</table><br>';
 
-  // 六、设备选型建议
+  // 六、结构尺寸设计
   html += '<table>';
-  html += '<tr><td colspan="4" class="section">六、设备选型建议（含安全系数）</td></tr>';
+  html += '<tr><td colspan="4" class="section">六、结构尺寸设计</td></tr>';
+  html += '<tr><th colspan="4">基本参数</th></tr>';
+  html += '<tr><td class="label">空气密度</td><td class="value">' + rho_air.toFixed(3) + ' kg/m³</td><td class="label">体积流量</td><td class="value">' + volFlow_m3h.toFixed(0) + ' m³/h (' + volFlow.toFixed(2) + ' m³/s)</td></tr>';
+  html += '<tr><td class="label">宽高比</td><td class="value">1.5</td><td class="label">AHU总长</td><td class="value">' + totalLength2.toFixed(1) + ' m</td></tr>';
+  html += '</table><br>';
+
+  html += '<table>';
+  html += '<tr><th>功能段</th><th>面风速 (m/s)</th><th>截面积 (m²)</th><th>宽度 (mm)</th><th>高度 (mm)</th><th>段长 (m)</th></tr>';
+  var secNamesXL2 = ['初效过滤器段', '表冷器段', '电加热器段', '加湿器段', '风机段', '出风口段'];
+  var secs2 = [sec_filter2, sec_coil2, sec_heater2, sec_humidifier2, sec_fan2, sec_outlet2];
+  var secVels2 = [v_filter2, v_coil2, v_heater2, v_humidifier2, v_fan_outlet2, v_outlet2];
+  var secLens2 = [len_filter2, len_coil2, len_heater2, len_humidifier2, len_fan2, 0.3];
+  for (var si2 = 0; si2 < secNamesXL2.length; si2++) {
+    var sk2 = secs2[si2];
+    html += '<tr><td class="label">' + secNamesXL2[si2] + '</td>' +
+      '<td class="value">' + secVels2[si2].toFixed(1) + '</td>' +
+      '<td class="value">' + sk2.area.toFixed(3) + '</td>' +
+      '<td class="value">' + (sk2.w * 1000).toFixed(0) + '</td>' +
+      '<td class="value">' + (sk2.h * 1000).toFixed(0) + '</td>' +
+      '<td class="value">' + secLens2[si2].toFixed(1) + '</td></tr>';
+  }
+  html += '<tr style="font-weight:bold"><td class="label">合计</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="value">' + totalLength2.toFixed(1) + ' m</td></tr>';
+  html += '</table><br>';
+
+  html += '<table>';
+  html += '<tr><th colspan="4">箱体材料规格</th></tr>';
+  html += '<tr><th>部件</th><th>规格</th><th>标准</th><th>备注</th></tr>';
+  html += '<tr><td>外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td><td>防腐、强度高</td></tr>';
+  html += '<tr><td>保温层</td><td>聚氨酯 50mm（密度 ≥ 40kg/m³）</td><td>GB/T 21558-2008</td><td>保温、防结露</td></tr>';
+  html += '<tr><td>内板</td><td>镀锌钢板 1.0mm</td><td>GB/T 2518-2019</td><td>防腐、光滑</td></tr>';
+  html += '<tr><td>框架</td><td>铝合金型材 40×40mm</td><td>GB/T 5237-2017</td><td>轻质、高强度</td></tr>';
+  html += '<tr><td>底座</td><td>槽钢 10# 热镀锌</td><td>GB/T 706-2016</td><td>承重、防腐</td></tr>';
+  html += '<tr><td>密封</td><td>硅酮密封胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>';
+  html += '</table><br>';
+
+  // 七、设备选型建议
+  html += '<table>';
+  html += '<tr><td colspan="4" class="section">七、设备选型建议（含安全系数）</td></tr>';
   html += '<tr><th>设备名称</th><th>参数</th><th>数值</th><th>单位</th></tr>';
   html += '<tr><td class="label" rowspan="5">表冷器</td><td>选型制冷量 (K=1.10)</td><td class="value">' + sel_cooling.toFixed(1) + '</td><td>kW</td></tr>';
   html += '<tr><td>处理风量</td><td class="value">' + air_flow_m3h.toFixed(0) + '</td><td>m³/h</td></tr>';
@@ -2598,9 +2960,9 @@ function exportReport() {
   html += '<tr><td>控制精度</td><td>温度 ±0.5℃ / 湿度 ±3%</td><td>-</td></tr>';
   html += '</table><br>';
 
-  // 七、计算公式说明
+  // 八、计算公式说明
   html += '<table>';
-  html += '<tr><td colspan="2" class="section">七、计算公式及原理说明</td></tr>';
+  html += '<tr><td colspan="2" class="section">八、计算公式及原理说明</td></tr>';
   html += '<tr><th>公式名称</th><th>公式及说明</th></tr>';
   html += '<tr><td class="label">饱和水汽压 (Magnus公式)</td><td>P_sat = 0.61078 × exp(17.27 × T / (T + 237.3))  [kPa]<br>依据 GB/T 35226-2017《湿空气性质计算公式》</td></tr>';
   html += '<tr><td class="label">水蒸气分压力</td><td>P_v = RH × P_sat  [kPa]<br>RH 为相对湿度（小数形式）</td></tr>';
@@ -2612,9 +2974,9 @@ function exportReport() {
   html += '<tr><td class="label">水流量</td><td>ṁ_w = Q / (c_pw × ΔT)  [kg/s]<br>c_pw = 4.187 kJ/(kg·K) 为水的定压比热</td></tr>';
   html += '</table><br>';
 
-  // 八、引用标准
+  // 九、引用标准
   html += '<table>';
-  html += '<tr><td colspan="2" class="section">八、引用国标及行业标准</td></tr>';
+  html += '<tr><td colspan="2" class="section">九、引用国标及行业标准</td></tr>';
   html += '<tr><th>标准编号</th><th>标准名称及引用内容</th></tr>';
   html += '<tr><td>GB/T 35226-2017</td><td>《湿空气性质计算公式》- Magnus 饱和水汽压公式</td></tr>';
   html += '<tr><td>GB 50736-2012</td><td>《民用建筑供暖通风与空气调节设计规范》- 焓差法负荷计算、空调系统设计</td></tr>';
@@ -2701,6 +3063,29 @@ function exportReportElectron() {
   var dateTimeStr = dateStr + " " + timeStr;
   var fileName = 'AHU_设计计算报告_' + dateStr + '_' + timeStr.replace(/:/g, '') + '.xls';
 
+  // 结构尺寸参数
+  var T_abs_in = tempIn + 273.15;
+  var R_air = 0.287;
+  var rho_air = P_atm / (R_air * T_abs_in);
+  var volFlow = massFlow / rho_air;
+  var volFlow_m3h = volFlow * 3600;
+
+  function calcWH(area, ar) {
+    var w = Math.sqrt(area * ar);
+    var h = area / w;
+    return { w: w, h: h, area: area };
+  }
+  var ar = 1.5;
+  var v_filter = 2.5, v_coil = 2.2, v_heater = 2.8, v_humidifier = 2.5, v_fan_outlet = 4.0, v_outlet = 5.0;
+  var sec_filter = calcWH(volFlow / v_filter, ar);
+  var sec_coil = calcWH(volFlow / v_coil, ar);
+  var sec_heater = calcWH(volFlow / v_heater, ar);
+  var sec_humidifier = calcWH(volFlow / v_humidifier, ar);
+  var sec_fan = calcWH(volFlow / v_fan_outlet, ar);
+  var sec_outlet = calcWH(volFlow / v_outlet, ar);
+  var len_filter = 0.6, len_coil = 0.5, len_heater = 0.4, len_humidifier = 0.5, len_fan = 1.0;
+  var totalLength = len_filter + len_coil + len_heater + len_humidifier + len_fan + 1.2;
+
   // 构建Excel兼容的HTML表格
   var html = buildExcelHTML({
     dateStr: dateStr, timeStr: timeStr, dateTimeStr: dateTimeStr,
@@ -2712,7 +3097,15 @@ function exportReportElectron() {
     m_chilled: m_chilled, elec_power: elec_power, V_chilled: V_chilled,
     sel_cooling: sel_cooling, sel_elec_power: sel_elec_power,
     air_flow_m3h: air_flow_m3h, sel_air_flow: sel_air_flow,
-    face_width: face_width, face_height: face_height
+    face_width: face_width, face_height: face_height,
+    rho_air: rho_air, volFlow: volFlow, volFlow_m3h: volFlow_m3h,
+    totalLength: totalLength,
+    v_filter: v_filter, v_coil: v_coil, v_heater: v_heater, v_humidifier: v_humidifier,
+    v_fan_outlet: v_fan_outlet, v_outlet: v_outlet,
+    sec_filter: sec_filter, sec_coil: sec_coil, sec_heater: sec_heater,
+    sec_humidifier: sec_humidifier, sec_fan: sec_fan, sec_outlet: sec_outlet,
+    len_filter: len_filter, len_coil: len_coil, len_heater: len_heater,
+    len_humidifier: len_humidifier, len_fan: len_fan
   });
 
   // 通过IPC发送到主进程保存
@@ -2808,9 +3201,47 @@ function buildExcelHTML(d) {
   html += '<tr><td class="label">电热效率</td><td>η</td><td class="value">98</td><td>%</td></tr>';
   html += '</table><br>';
 
-  // 六、设备选型建议
+  // 六、结构尺寸设计
   html += '<table>';
-  html += '<tr><td colspan="4" class="section">六、设备选型建议（含安全系数）</td></tr>';
+  html += '<tr><td colspan="4" class="section">六、结构尺寸设计</td></tr>';
+  html += '<tr><th colspan="4">基本参数</th></tr>';
+  html += '<tr><td class="label">空气密度</td><td class="value">' + d.rho_air.toFixed(3) + ' kg/m³</td><td class="label">体积流量</td><td class="value">' + d.volFlow_m3h.toFixed(0) + ' m³/h (' + d.volFlow.toFixed(2) + ' m³/s)</td></tr>';
+  html += '<tr><td class="label">宽高比</td><td class="value">1.5</td><td class="label">AHU总长</td><td class="value">' + d.totalLength.toFixed(1) + ' m</td></tr>';
+  html += '</table><br>';
+
+  html += '<table>';
+  html += '<tr><th>功能段</th><th>面风速 (m/s)</th><th>截面积 (m²)</th><th>宽度 (mm)</th><th>高度 (mm)</th><th>段长 (m)</th></tr>';
+  var secNamesXL = ['初效过滤器段', '表冷器段', '电加热器段', '加湿器段', '风机段', '出风口段'];
+  var secKeys = ['sec_filter', 'sec_coil', 'sec_heater', 'sec_humidifier', 'sec_fan', 'sec_outlet'];
+  var secVels = [d.v_filter, d.v_coil, d.v_heater, d.v_humidifier, d.v_fan_outlet, d.v_outlet];
+  var secLens = [d.len_filter, d.len_coil, d.len_heater, d.len_humidifier, d.len_fan, 0.3];
+
+  for (var si = 0; si < secNamesXL.length; si++) {
+    var sk = d[secKeys[si]];
+    html += '<tr><td class="label">' + secNamesXL[si] + '</td>' +
+      '<td class="value">' + secVels[si].toFixed(1) + '</td>' +
+      '<td class="value">' + sk.area.toFixed(3) + '</td>' +
+      '<td class="value">' + (sk.w * 1000).toFixed(0) + '</td>' +
+      '<td class="value">' + (sk.h * 1000).toFixed(0) + '</td>' +
+      '<td class="value">' + secLens[si].toFixed(1) + '</td></tr>';
+  }
+  html += '<tr style="font-weight:bold"><td class="label">合计</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="value">' + d.totalLength.toFixed(1) + ' m</td></tr>';
+  html += '</table><br>';
+
+  html += '<table>';
+  html += '<tr><th colspan="4">箱体材料规格</th></tr>';
+  html += '<tr><th>部件</th><th>规格</th><th>标准</th><th>备注</th></tr>';
+  html += '<tr><td>外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td><td>防腐、强度高</td></tr>';
+  html += '<tr><td>保温层</td><td>聚氨酯 50mm（密度 ≥ 40kg/m³）</td><td>GB/T 21558-2008</td><td>保温、防结露</td></tr>';
+  html += '<tr><td>内板</td><td>镀锌钢板 1.0mm</td><td>GB/T 2518-2019</td><td>防腐、光滑</td></tr>';
+  html += '<tr><td>框架</td><td>铝合金型材 40×40mm</td><td>GB/T 5237-2017</td><td>轻质、高强度</td></tr>';
+  html += '<tr><td>底座</td><td>槽钢 10# 热镀锌</td><td>GB/T 706-2016</td><td>承重、防腐</td></tr>';
+  html += '<tr><td>密封</td><td>硅酮密封胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>';
+  html += '</table><br>';
+
+  // 七、设备选型建议
+  html += '<table>';
+  html += '<tr><td colspan="4" class="section">七、设备选型建议（含安全系数）</td></tr>';
   html += '<tr><th>设备名称</th><th>参数</th><th>数值</th><th>单位</th></tr>';
   html += '<tr><td class="label" rowspan="5">表冷器</td><td>选型制冷量 (K=1.10)</td><td class="value">' + d.sel_cooling.toFixed(1) + '</td><td>kW</td></tr>';
   html += '<tr><td>处理风量</td><td class="value">' + d.air_flow_m3h.toFixed(0) + '</td><td>m³/h</td></tr>';
@@ -2832,9 +3263,9 @@ function buildExcelHTML(d) {
   html += '<tr><td>控制精度</td><td>温度 ±0.5℃ / 湿度 ±3%</td><td>-</td></tr>';
   html += '</table><br>';
 
-  // 七、计算公式说明
+  // 八、计算公式说明
   html += '<table>';
-  html += '<tr><td colspan="2" class="section">七、计算公式及原理说明</td></tr>';
+  html += '<tr><td colspan="2" class="section">八、计算公式及原理说明</td></tr>';
   html += '<tr><th>公式名称</th><th>公式及说明</th></tr>';
   html += '<tr><td class="label">饱和水汽压 (Magnus公式)</td><td>P_sat = 0.61078 × exp(17.27 × T / (T + 237.3))  [kPa]<br>依据 GB/T 35226-2017《湿空气性质计算公式》</td></tr>';
   html += '<tr><td class="label">水蒸气分压力</td><td>P_v = RH × P_sat  [kPa]<br>RH 为相对湿度（小数形式）</td></tr>';
@@ -2846,9 +3277,9 @@ function buildExcelHTML(d) {
   html += '<tr><td class="label">水流量</td><td>ṁ_w = Q / (c_pw × ΔT)  [kg/s]<br>c_pw = 4.187 kJ/(kg·K) 为水的定压比热</td></tr>';
   html += '</table><br>';
 
-  // 八、引用标准
+  // 九、引用标准
   html += '<table>';
-  html += '<tr><td colspan="2" class="section">八、引用国标及行业标准</td></tr>';
+  html += '<tr><td colspan="2" class="section">九、引用国标及行业标准</td></tr>';
   html += '<tr><th>标准编号</th><th>标准名称及引用内容</th></tr>';
   html += '<tr><td>GB/T 35226-2017</td><td>《湿空气性质计算公式》- Magnus 饱和水汽压公式</td></tr>';
   html += '<tr><td>GB 50736-2012</td><td>《民用建筑供暖通风与空气调节设计规范》- 焓差法负荷计算、空调系统设计</td></tr>';
@@ -2977,29 +3408,28 @@ function refreshSvgExportButtons() {
   var containers = document.querySelectorAll('.process-flow-container');
   for (var i = 0; i < containers.length; i++) {
     var container = containers[i];
-    var btnGroup = container.parentNode.querySelector('.svg-export-group');
-    if (btnGroup) continue;
+    if (container.parentNode.querySelector('.svg-export-group')) continue;
     var svgEl = container.querySelector('svg');
     if (!svgEl) continue;
     var titleEl = container.parentNode.querySelector('h4');
     var title = titleEl ? titleEl.textContent.replace(/[^\w\u4e00-\u9fff]/g, '_') : 'diagram_' + i;
     var btnDiv = document.createElement('div');
-    btnDiv.className = 'svg-export-group';
+    btnDiv.className = 'svg-export-group toolbar-btn-group';
     btnDiv.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-    var exportBtn = document.createElement('button');
-    exportBtn.className = 'toolbar-btn';
-    exportBtn.textContent = '📄 导出 SVG';
-    exportBtn.onclick = (function(svg, fn) {
+    var pdfBtn = document.createElement('button');
+    pdfBtn.className = 'toolbar-btn';
+    pdfBtn.textContent = '📄 导出 PDF';
+    pdfBtn.onclick = (function(svg, fn) {
+      return function() { exportSvgAsPdf(svg, fn); };
+    })(svgEl, title + '.svg');
+    var svgBtn = document.createElement('button');
+    svgBtn.className = 'toolbar-btn';
+    svgBtn.textContent = '✏ 导出 SVG（可编辑）';
+    svgBtn.onclick = (function(svg, fn) {
       return function() { exportSvgElement(svg, fn); };
     })(svgEl, title + '.svg');
-    var pngBtn = document.createElement('button');
-    pngBtn.className = 'toolbar-btn';
-    pngBtn.textContent = '🖼 导出 PNG';
-    pngBtn.onclick = (function(svg, fn) {
-      return function() { exportSvgAsPng(svg, fn); };
-    })(svgEl, title + '.png');
-    btnDiv.appendChild(exportBtn);
-    btnDiv.appendChild(pngBtn);
+    btnDiv.appendChild(pdfBtn);
+    btnDiv.appendChild(svgBtn);
     container.parentNode.insertBefore(btnDiv, container.nextSibling);
   }
 }
@@ -3030,4 +3460,27 @@ function exportSvgAsPng(svgEl, fileName) {
     });
   };
   img.src = url;
+}
+
+function exportSvgAsPdf(svgEl, fileName) {
+  document.getElementById("statusText").textContent = "正在生成 PDF...";
+  var serializer = new XMLSerializer();
+  var svgContent = serializer.serializeToString(svgEl);
+  var doctype = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">';
+  var fullSvg = doctype + svgContent;
+
+  try {
+    require('electron');
+    var { ipcRenderer } = require('electron');
+    ipcRenderer.send('save-pdf-file', { svgContent: fullSvg, fileName: fileName });
+    ipcRenderer.once('save-pdf-reply', function(event, reply) {
+      if (reply.success) {
+        document.getElementById("statusText").textContent = 'PDF 已保存至: ' + reply.path;
+      } else {
+        document.getElementById("statusText").textContent = '保存失败: ' + reply.error;
+      }
+    });
+  } catch (e) {
+    document.getElementById("statusText").textContent = 'PDF 导出仅在桌面版支持';
+  }
 }
