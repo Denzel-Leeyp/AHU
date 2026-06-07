@@ -54,7 +54,8 @@ function switchTab(tabName) {
     calc: "参数计算",
     guide: "设计指南",
     knowledge: "知识库",
-    selection: "设备选型建议"
+    selection: "设备选型建议",
+    qa: "在线问答"
   };
   document.getElementById("statusText").textContent = "当前页面：" + tabNames[tabName];
 
@@ -70,6 +71,13 @@ function switchTab(tabName) {
   // 切换到知识库时初始化
   if (tabName === "knowledge") {
     initKnowledgeBase();
+  }
+
+  // 切换到在线问答时初始化
+  if (tabName === "qa") {
+    if (document.getElementById('qaQuickTags').children.length === 0) {
+      initQuickTags();
+    }
   }
 }
 
@@ -3304,7 +3312,614 @@ function pad2(n) {
 }
 
 // ==========================================
-// 十、工程制图标准图框与标题栏 (GB/T 14689-2008)
+// 十、在线问答模块
+// ==========================================
+
+var qaKnowledge = [
+  // ===== 1. 公式类 =====
+  {
+    tags: ['公式', '计算'],
+    keywords: ['制冷量', '冷负荷', '冷却', 'Q_c', '冷量'],
+    question: '制冷量（冷负荷）如何计算？',
+    category: '公式',
+    answer: '<p>制冷量采用<b>焓差法</b>计算，公式如下：</p>' +
+      '<div class="step-formula">Q_c = ṁ × (h₁ − h₂)</div><p>其中：</p><ul>' +
+      '<li><b>ṁ</b> — 空气质量流量 (kg/s)</li>' +
+      '<li><b>h₁</b> — 入口空气比焓 (kJ/kg)</li>' +
+      '<li><b>h₂</b> — 出口空气比焓 (kJ/kg)</li></ul>' +
+      '<div class="physical-meaning">物理意义：制冷量等于单位时间内空气从入口状态到出口状态所释放的总热量，包含显热（温度变化）和潜热（水蒸气凝结）两部分。</div>' +
+      '<div class="step-formula">h = 1.006 × T + W × (2501 + 1.86 × T)</div><p>其中 1.006×T 为干空气显热，W×2501 为水蒸气潜热。</p>' +
+      '<div class="standards-ref">引用标准：GB 50736-2012《民用建筑供暖通风与空气调节设计规范》第7章 焓差法负荷计算</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['加热量', '加热', '制热', 'Q_h', '热量'],
+    question: '加热量如何计算？',
+    category: '公式',
+    answer: '<p>加热量采用<b>显热法</b>计算：</p>' +
+      '<div class="step-formula">Q_h = ṁ × c_p × (T₂ − T₁)</div><p>其中：</p><ul>' +
+      '<li><b>ṁ</b> — 空气质量流量 (kg/s)</li>' +
+      '<li><b>c_p</b> — 空气定压比热 = 1.006 kJ/(kg·K)</li>' +
+      '<li><b>T₂</b> — 出口温度 (℃)</li>' +
+      '<li><b>T₁</b> — 入口温度 (℃)</li></ul>' +
+      '<div class="physical-meaning">含义：加热量仅考虑温度变化带来的显热，不含潜热。当出口温度高于入口温度时为正（需要加热），反之无需加热。</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['除湿量', '除湿', 'm_deh', '冷凝水', '凝结'],
+    question: '除湿量怎么计算？每小时产生多少冷凝水？',
+    category: '公式',
+    answer: '<p>除湿量计算公式：</p>' +
+      '<div class="step-formula">ṁ_deh = ṁ × (W₁ − W₂) × 1000</div><p>其中：</p><ul>' +
+      '<li><b>ṁ_deh</b> — 除湿量 (g/s)</li>' +
+      '<li><b>ṁ</b> — 空气质量流量 (kg/s)</li>' +
+      '<li><b>W₁, W₂</b> — 入口/出口含湿量 (kg/kg)</li>' +
+      '<li>乘以 1000 将 kg/kg 转换为 g/kg</li></ul>' +
+      '<div class="step-result">每小时冷凝水量 = ṁ_deh × 3.6 (L/h)</div>' +
+      '<div class="physical-meaning">含义：每秒钟从空气中凝结分离出的水分量。含湿量差越大、风量越大，除湿量越大。</div>' +
+      '<div class="engineering-exp"><strong>设计经验：</strong>夏季高温高湿工况除湿量可达 0.5~2.0 L/h，需配置足够容量的接水盘和排水管（DN32以上）。</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['饱和水汽压', '饱和蒸汽压', 'P_sat', 'Magnus', '马格努斯'],
+    question: '饱和水汽压公式是什么？Magnus 公式如何计算？',
+    category: '公式',
+    answer: '<p>饱和水汽压采用<b>Magnus 公式</b>计算（依据 GB/T 35226-2017）：</p>' +
+      '<div class="step-formula">P_sat = 0.61078 × exp(17.27 × T / (T + 237.3))</div><p>其中：</p><ul>' +
+      '<li><b>P_sat</b> — 饱和水汽压 (kPa)</li>' +
+      '<li><b>T</b> — 干球温度 (℃)</li>' +
+      '<li><b>exp</b> — 自然指数函数</li></ul>' +
+      '<div class="physical-meaning">物理意义：给定温度下，空气中水蒸气达到饱和状态时的分压力。温度越高，饱和水汽压越大。</div>' +
+      '<div class="step-result">常见值：0℃ → 0.611 kPa，20℃ → 2.338 kPa，40℃ → 7.376 kPa</div>' +
+      '<div class="standards-ref">引用标准：GB/T 35226-2017《湿空气性质计算公式》</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['含湿量', 'W', '湿度比', 'd'],
+    question: '含湿量怎么计算？物理意义是什么？',
+    category: '公式',
+    answer: '<p>含湿量计算公式：</p>' +
+      '<div class="step-formula">W = 0.622 × P_v / (P_atm − P_v)</div><p>其中：</p><ul>' +
+      '<li><b>W</b> — 含湿量 (kg/kg 干空气)</li>' +
+      '<li><b>P_v</b> — 水蒸气分压力 = RH × P_sat (kPa)</li>' +
+      '<li><b>P_atm</b> — 大气压力 (kPa)</li>' +
+      '<li><b>0.622</b> — 水分子量 18.02 / 干空气分子量 28.97</li></ul>' +
+      '<div class="physical-meaning">物理意义：每千克干空气中所含的水蒸气质量（单位：kg/kg 或 g/kg）。含湿量是空调除湿设计的关键参数，含湿量差直接决定除湿量和潜热负荷。</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['焓', '比焓', 'h', 'enthalpy', '焓值'],
+    question: '什么是比焓？比焓如何计算？',
+    category: '公式',
+    answer: '<p>比焓是湿空气热力学中最重要的参数之一，计算公式：</p>' +
+      '<div class="step-formula">h = 1.006 × T + W × (2501 + 1.86 × T)</div><p>其中三项的物理意义：</p><ul>' +
+      '<li><b>1.006 × T</b> — 干空气显热（温度变化带来的热量）</li>' +
+      '<li><b>W × 2501</b> — 水蒸气潜热（0℃ 时水的汽化潜热为 2501 kJ/kg）</li>' +
+      '<li><b>W × 1.86 × T</b> — 水蒸气显热</li></ul>' +
+      '<div class="physical-meaning">物理意义：单位质量干空气及其所含的水蒸气的总热量（kJ/kg）。焓差 Δh = h₁ − h₂ 直接反映了空气处理过程中需要移除或添加的热量。</div>' +
+      '<div class="engineering-exp"><strong>设计要点：</strong>空调负荷计算必须用焓差法（Q = ṁ × Δh），不能用温差法，因为温差法忽略了除湿的潜热负荷。高湿工况下潜热可占总负荷的 40%~60%。</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['水蒸气分压力', 'P_v', '分压力', '分压'],
+    question: '水蒸气分压力是什么？如何计算？',
+    category: '公式',
+    answer: '<p>水蒸气分压力计算公式：</p>' +
+      '<div class="step-formula">P_v = RH × P_sat</div><p>其中：</p><ul>' +
+      '<li><b>P_v</b> — 水蒸气分压力 (kPa)</li>' +
+      '<li><b>RH</b> — 相对湿度（小数形式，如 80% 取 0.80）</li>' +
+      '<li><b>P_sat</b> — 同温度下饱和水汽压 (kPa)</li></ul>' +
+      '<div class="physical-meaning">物理意义：湿空气中水蒸气组分所产生的分压力（道尔顿分压定律）。P_v 直接反映空气中水蒸气的绝对含量，不受温度影响，是计算含湿量的关键中间参数。</div>' +
+      '<div class="step-formula">含湿量 W = 0.622 × P_v / (P_atm − P_v)</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['空气密度', '密度', 'ρ', 'rho'],
+    question: '空气密度如何计算？对 AHU 设计有什么影响？',
+    category: '公式',
+    answer: '<p>空气密度计算公式（依据 GB/T 35226-2017）：</p>' +
+      '<div class="step-formula">ρ = P_atm / (R × T_abs)</div><p>其中：</p><ul>' +
+      '<li><b>ρ</b> — 空气密度 (kg/m³)</li>' +
+      '<li><b>P_atm</b> — 大气压力 (kPa)</li>' +
+      '<li><b>R</b> — 干空气气体常数 = 0.287 kJ/(kg·K)</li>' +
+      '<li><b>T_abs</b> — 绝对温度 = T(℃) + 273.15 (K)</li></ul>' +
+      '<div class="step-result">标准状态 (20℃, 101.325kPa) 下 ρ ≈ 1.204 kg/m³</div>' +
+      '<div class="physical-meaning">含义：空气密度直接影响体积流量 Q_v = ṁ / ρ 的计算，进而影响 AHU 各功能段截面尺寸的确定。</div>' +
+      '<div class="engineering-exp"><strong>设计要点：</strong>海拔升高 1000m，大气压约降低 10kPa，空气密度约降低 10%。高原地区 AHU 截面需相应增大。</div>'
+  },
+  {
+    tags: ['公式', '计算'],
+    keywords: ['体积流量', '风量', '风量计算', 'Q_v', 'm3/h'],
+    question: '体积流量（风量）与质量流量如何换算？',
+    category: '公式',
+    answer: '<p>质量流量与体积流量的换算关系：</p>' +
+      '<div class="step-formula">Q_v = ṁ / ρ</div><div class="step-formula">Q_v(m³/h) = Q_v(m³/s) × 3600</div><p>其中：</p><ul>' +
+      '<li><b>ṁ</b> — 空气质量流量 (kg/s)</li>' +
+      '<li><b>ρ</b> — 空气密度 (kg/m³)</li></ul>' +
+      '<div class="step-result">近似换算：1 kg/s ≈ 3000 m³/h（空气密度取 1.2 kg/m³）</div>' +
+      '<div class="physical-meaning">体积流量是确定 AHU 截面尺寸（A = Q_v / v）的基础参数，直接影响设备选型和风管设计。</div>'
+  },
+
+  // ===== 2. 原理类 =====
+  {
+    tags: ['原理', '概念'],
+    keywords: ['相对湿度', 'RH', '湿度', '相对湿'],
+    question: '什么是相对湿度？与含湿量有什么区别？',
+    category: '原理',
+    answer: '<p><b>相对湿度</b>定义：空气中实际水蒸气分压力与同温度下饱和水汽压之比。</p>' +
+      '<div class="step-formula">RH = (P_v / P_sat) × 100%</div><p><b>与含湿量的区别：</b></p><ul>' +
+      '<li><b>相对湿度 RH</b> — 表示空气接近饱和的程度（%）。受温度影响，温度升高时 RH 降低（即使水蒸气量不变）</li>' +
+      '<li><b>含湿量 W</b> — 单位质量干空气中水蒸气的质量（g/kg）。不受温度影响，是一个绝对量</li></ul>' +
+      '<div class="physical-meaning">例子：20℃/50%RH 的空气中，P_v = 1.169 kPa，W = 7.26 g/kg；加热到 30℃ 后，RH 降至约 28%，但含湿量 W 保持不变（因为没有加水或除湿）。</div>' +
+      '<div class="engineering-exp"><strong>设计经验：</strong>空调控制中，温度控制响应快（几分钟），湿度控制响应慢（几十分钟），因此湿度 PID 的 I 参数应比温度 PID 大。</div>'
+  },
+  {
+    tags: ['原理', '概念'],
+    keywords: ['露点', '露点温度', '结露', 'dew'],
+    question: '什么是露点温度？在 AHU 设计中有什么作用？',
+    category: '原理',
+    answer: '<p><b>露点温度</b>定义：在含湿量不变的情况下，将空气冷却到饱和状态（RH=100%）时的温度。</p>' +
+      '<div class="step-formula">T_dew = 237.3 × ln(P_v / 0.61078) / (17.27 − ln(P_v / 0.61078))</div>' +
+      '<div class="physical-meaning"><b>在 AHU 设计中的关键作用：</b></div><ul>' +
+      '<li><b>除湿条件：</b>表冷器表面温度必须低于空气露点温度，水蒸气才能凝结成水</li>' +
+      '<li><b>防结露：</b>冷冻水管和箱体保温厚度需保证表面温度高于环境空气露点温度</li>' +
+      '<li><b>表冷器设计：</b>冷冻水进水温度通常取 7℃，出水 12℃，确保表冷器表面温度低于露点</li></ul>' +
+      '<div class="engineering-exp"><strong>经验值：</strong>标准工况 25℃/60%RH 的露点温度约 16.7℃。表冷器出水温度建议低于露点 3~5℃。</div>'
+  },
+  {
+    tags: ['原理', '概念'],
+    keywords: ['焓湿图', 'h-d', 'h-d图', 'psychrometric', '空气状态'],
+    question: '什么是焓湿图（h-d 图）？怎么看？',
+    category: '原理',
+    answer: '<p><b>焓湿图</b>（又称 h-d 图或 Psychrometric Chart）是空调设计的核心工具。</p>' +
+      '<p><b>坐标轴：</b></p><ul>' +
+      '<li>横轴 — 干球温度 T (℃)</li>' +
+      '<li>纵轴 — 含湿量 W (g/kg 干空气)</li></ul>' +
+      '<p><b>主要曲线：</b></p><ul>' +
+      '<li><b>等 RH 线：</b>从左上到右下的弧线，最上方粗线为 RH=100% 饱和线</li>' +
+      '<li><b>等焓线：</b>左下到右上的斜线</li>' +
+      '<li><b>等温线：</b>垂直的直线</li></ul>' +
+      '<div class="physical-meaning">焓湿图可直观表示空气处理过程：冷却除湿（向左下）、加热（向右）、加湿（向上）等。本软件在计算结果页面中提供了焓湿图可视化功能。</div>'
+  },
+
+  // ===== 3. 设计类 =====
+  {
+    tags: ['设计', '结构'],
+    keywords: ['风速', '面风速', '迎面风速', 'v'],
+    question: '各功能段的面风速如何确定？推荐值是多少？',
+    category: '设计',
+    answer: '<p>各功能段推荐面风速（依据 GB/T 14294-2008 和 GB 50019-2015）：</p>' +
+      '<table class="air-state-table"><tr><th>功能段</th><th>推荐风速 (m/s)</th><th>设计理由</th></tr>' +
+      '<tr><td class="param-name">初效过滤器</td><td class="highlight">2.0 ~ 2.5</td><td>过高阻力大、过滤效率低</td></tr>' +
+      '<tr><td class="param-name">表冷器</td><td class="highlight">2.0 ~ 2.5</td><td>保证表冷器表面温度低于露点</td></tr>' +
+      '<tr><td class="param-name">电加热器</td><td class="highlight">2.5 ~ 3.0</td><td>过高导致加热不均匀</td></tr>' +
+      '<tr><td class="param-name">加湿器</td><td class="highlight">2.0 ~ 2.5</td><td>保证水蒸气充分混合</td></tr>' +
+      '<tr><td class="param-name">风机出口</td><td class="highlight">3.5 ~ 5.0</td><td>过高产生噪音和振动</td></tr>' +
+      '<tr><td class="param-name">出风口</td><td class="highlight">4.0 ~ 6.0</td><td>与测试台对接</td></tr></table>' +
+      '<div class="step-formula">截面积 A = Q_v / v，宽度 W = √(A × 1.5)，高度 H = A / W</div>' +
+      '<div class="standards-ref">引用标准：GB/T 14294-2008《组合式空调机组》、GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</div>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['总长度', 'AHU长度', '总长', 'layout', '布局'],
+    question: 'AHU 总长度如何确定？各功能段长度多少？',
+    category: '设计',
+    answer: '<p>AHU 总长度 = 各功能段长度之和 + 过渡段（1.0~1.5m）：</p>' +
+      '<table class="air-state-table"><tr><th>功能段</th><th>推荐段长 (mm)</th><th>说明</th></tr>' +
+      '<tr><td class="param-name">进风口段</td><td class="highlight">300 ~ 400</td><td>含风阀和防虫网</td></tr>' +
+      '<tr><td class="param-name">初效过滤器</td><td class="highlight">500 ~ 600</td><td>含过滤器和检修空间</td></tr>' +
+      '<tr><td class="param-name">表冷器段</td><td class="highlight">400 ~ 500</td><td>含盘管和接水盘空间</td></tr>' +
+      '<tr><td class="param-name">电加热器</td><td class="highlight">300 ~ 400</td><td>含发热管和均流板</td></tr>' +
+      '<tr><td class="param-name">加湿器段</td><td class="highlight">500 ~ 600</td><td>含蒸汽分配管</td></tr>' +
+      '<tr><td class="param-name">风机段</td><td class="highlight">800 ~ 1000</td><td>含减震器和软连接</td></tr>' +
+      '<tr><td class="param-name">出风口段</td><td class="highlight">300 ~ 400</td><td>含调节阀和消音器</td></tr></table>' +
+      '<div class="engineering-exp"><strong>设计经验：</strong>中小型 AHU（处理风量 3000 m³/h 以下）典型总长度约 3.5~4.5m。每段前后预留 ≥300mm 检修空间。</div>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['箱体', '材料', '面板', '保温', '不锈钢'],
+    question: 'AHU 箱体材料如何选择？有什么标准要求？',
+    category: '设计',
+    answer: '<p>AHU 箱体推荐采用"三明治"断冷桥结构：</p>' +
+      '<table class="air-state-table"><tr><th>部件</th><th>推荐规格</th><th>标准依据</th></tr>' +
+      '<tr><td class="param-name">外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td></tr>' +
+      '<tr><td class="param-name">保温层</td><td>聚氨酯 50mm（≥40kg/m³）</td><td>GB/T 21558-2008</td></tr>' +
+      '<tr><td class="param-name">内板</td><td>镀锌钢板 1.0mm</td><td>GB/T 2518-2019</td></tr>' +
+      '<tr><td class="param-name">框架</td><td>铝合金型材 40×40mm</td><td>GB/T 5237-2017</td></tr></table>' +
+      '<div class="engineering-exp"><strong>设计要点：</strong><ul>' +
+      '<li>铝合金框架采用断冷桥设计，避免内外温差通过框架传导产生冷凝水</li>' +
+      '<li>50mm 聚氨酯保温层导热系数 ≤0.024 W/(m·K)，可防止夏季箱体外表面结露</li>' +
+      '<li>箱体漏风率 ≤1%（GB/T 14294-2008），精密测试台建议 ≤0.5%</li>' +
+      '<li>箱体承受 ±2000Pa 压力不变形</li></ul></div>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['宽高比', 'aspect', '比例', '截面'],
+    question: 'AHU 的宽高比一般取多少？为什么？',
+    category: '设计',
+    answer: '<p>AHU 宽高比 λ 一般取 <b>1.2 ~ 1.8</b>，推荐值 <b>1.5</b>。</p>' +
+      '<div class="step-formula">宽度 W = √(A × λ)，高度 H = A / W</div>' +
+      '<div class="physical-meaning"><b>选择依据：</b></div><ul>' +
+      '<li>宽高比 1.5 可使截面接近方形，气流分布均匀</li>' +
+      '<li>过高（>2.0）→ 截面扁宽，气流易偏流，检修门需做很大</li>' +
+      '<li>过低（<1.2）→ 截面过高，需增加平台才能检修顶部设备</li>' +
+      '<li>需根据安装空间实际条件调整（如场地宽度受限）</li></ul>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['漏风率', '漏风', '密封', '泄漏'],
+    question: 'AHU 的漏风率标准是多少？如何保证？',
+    category: '设计',
+    answer: '<p><b>漏风率标准：</b></p><ul>' +
+      '<li><b>GB/T 14294-2008</b> 要求：组合式空调机组漏风率 ≤ <b>1%</b></li>' +
+      '<li>精密测试台（如涡轮增压器试验台）建议 ≤ <b>0.5%</b></li></ul>' +
+      '<p><b>保证措施：</b></p><ul>' +
+      '<li>面板接缝处用硅酮密封胶密封（GB/T 14683-2017）</li>' +
+      '<li>检修门采用橡胶密封条 + 锁扣压紧</li>' +
+      '<li>各功能段之间用隔板分隔，隔板接缝密封</li>' +
+      '<li>所有穿管线孔洞用防火密封胶封堵</li>' +
+      '<li>安装后进行漏风率测试（风机加压法）</li></ul>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['冷冻水', '水温', '供回水温差', '7℃', '12℃'],
+    question: '冷冻水的供回水温度一般取多少？为什么？',
+    category: '设计',
+    answer: '<p><b>标准供回水温度：供水 7℃ / 回水 12℃</b>，温差 <b>5℃</b>。</p>' +
+      '<div class="physical-meaning"><b>选 7℃ 的原因：</b></div><ul>' +
+      '<li>7℃ 的冷冻水能使表冷器表面温度降至约 9~10℃</li>' +
+      '<li>9~10℃ 低于夏季工况入口空气的露点温度（通常 15~20℃）</li>' +
+      '<li>可有效除湿，确保出口湿度满足要求</li></ul>' +
+      '<div class="physical-meaning"><b>选 5℃ 温差的原因：</b></div><ul>' +
+      '<li>5℃ 温差是行业标准（冷水机组标准工况）</li>' +
+      '<li>温差过大（如 10℃）→ 需更大流量，管道能耗增加</li>' +
+      '<li>温差过小（如 2℃）→ 需更大流量，水泵能耗增加</li>' +
+      '<li>5℃ 温差在换热效率和运行能耗之间取最优平衡</li></ul>' +
+      '<div class="step-formula">冷冻水质量流量 ṁ_ch = Q_c / (c_pw × ΔT) = Q_c / (4.187 × 5)</div>'
+  },
+  {
+    tags: ['设计', '结构'],
+    keywords: ['保温', '保温层', '厚度', '聚氨酯', '结露'],
+    question: '冷冻水管和 AHU 箱体的保温厚度如何确定？',
+    category: '设计',
+    answer: '<p><b>保温厚度推荐值：</b></p><ul>' +
+      '<li>冷冻水管 DN ≤ 50：保温层 ≥ <b>19mm</b>（橡塑）</li>' +
+      '<li>冷冻水管 DN > 50：保温层 ≥ <b>25mm</b>（橡塑）</li>' +
+      '<li>AHU 箱体：保温层 ≥ <b>50mm</b>（聚氨酯，密度 ≥ 40kg/m³）</li></ul>' +
+      '<div class="physical-meaning"><b>防结露原理：</b>保温层厚度应保证保温层外表面温度高于环境空气露点温度 1~2℃。</div>' +
+      '<div class="step-formula">临界保温厚度 δ = λ × (T_surface − T_pipe) / (α × (T_air − T_surface))</div>' +
+      '<div class="engineering-exp"><strong>设计经验：</strong>在标准工况 (26℃/60%RH，露点约 17.6℃) 下，7℃ 冷冻水管采用 19mm 橡塑保温即可满足防结露要求。高湿环境（如南方沿海）应增加至 25mm。</div>'
+  },
+
+  // ===== 4. 设备类 =====
+  {
+    tags: ['设备', '选型'],
+    keywords: ['表冷器', '冷却盘管', 'coil', '排数'],
+    question: '表冷器如何选型？排数怎么确定？',
+    category: '设备',
+    answer: '<p><b>表冷器选型步骤：</b></p><ol>' +
+      '<li>确定选型制冷量：Q_sel = Q_c × 1.10（安全系数）</li>' +
+      '<li>计算处理风量：Q_v (m³/h)</li>' +
+      '<li>选择排数（参考值）：</li></ol>' +
+      '<table class="air-state-table"><tr><th>制冷量范围</th><th>建议排数</th><th>适用场景</th></tr>' +
+      '<tr><td class="param-name">≤ 20 kW</td><td class="highlight">4 排</td><td>标准工况、无除湿要求</td></tr>' +
+      '<tr><td class="param-name">20 ~ 50 kW</td><td class="highlight">6 排</td><td>常规除湿工况</td></tr>' +
+      '<tr><td class="param-name">> 50 kW</td><td class="highlight">8 排</td><td>高湿除湿工况</td></tr></table>' +
+      '<div class="engineering-exp"><strong>选型要点：</strong>迎面风速 2.0~2.5 m/s，翅片间距 ≤ 2.0mm（除湿工况），铜管 φ16×0.5mm + 铝翅片。冷冻水流量按 ṁ_ch = Q_c / (4.187×5) 计算。</div>'
+  },
+  {
+    tags: ['设备', '选型'],
+    keywords: ['电加热器', '加热器', 'heater', '功率', 'SSR'],
+    question: '电加热器如何选型？功率怎么确定？',
+    category: '设备',
+    answer: '<p><b>电加热器选型步骤：</b></p><ol>' +
+      '<li>计算加热量：Q_h = ṁ × 1.006 × (T₂ − T₁) (kW)</li>' +
+      '<li>选型功率：P_sel = Q_h / 0.98 × 1.15（0.98 为电热效率，1.15 为安全系数）</li></ol>' +
+      '<div class="step-formula">P_elec = Q_h / η = Q_h / 0.98</div>' +
+      '<div class="physical-meaning"><b>控制方式：</b>推荐采用 <b>PID + SSR</b>（固态继电器）可控硅调功方式，可实现 0~100% 无级调节，控温精度 ±0.3℃。</div>' +
+      '<div class="engineering-exp"><strong>设计要点：</strong><ul>' +
+      '<li>加热器表面负荷 ≤ 3 W/cm²（保证发热管寿命）</li>' +
+      '<li>需设超温保护开关（80℃ 切断），确保安全</li>' +
+      '<li>加热段前后 ≥ 500mm 范围内不得有易燃材料</li>' +
+      '<li>加热段前后设均流板，确保温度均匀</li>' +
+      '<li>需独立供电回路，注意电缆截面和断路器选型</li></ul></div>'
+  },
+  {
+    tags: ['设备', '选型'],
+    keywords: ['风机', 'fan', '离心风机', '风压', '变频'],
+    question: '送风机如何选型？风量和风压怎么确定？',
+    category: '设备',
+    answer: '<p><b>风机选型步骤：</b></p><ol>' +
+      '<li><b>风量：</b>Q_fan = Q_v × 1.10（安全系数）</li>' +
+      '<li><b>全压：</b>按系统总阻力估算，AHU 系统一般 800~1200 Pa</li>' +
+      '<li><b>形式：</b>推荐后向离心风机（效率 75%~85%）</li>' +
+      '<li><b>驱动：</b>变频调速电机，实现 20%~100% 无级调节</li></ol>' +
+      '<div class="step-formula">估算电机功率 P_fan = (Q_fan × ΔP) / (1000 × η_fan × η_motor)</div>' +
+      '<div class="engineering-exp"><strong>品牌推荐：</strong>EBM-Papst（高端）、Ziehl-Abegg（中大型）、亿利达（国产性价比）。<br>' +
+      '<b>安装要点：</b>底部设 4 个弹簧减震器，出口设帆布软连接（≥200mm），前后设检修门。</div>'
+  },
+  {
+    tags: ['设备', '选型'],
+    keywords: ['加湿器', '加湿', 'humidifier', '电极', '湿膜'],
+    question: '加湿器如何选型？电极式和湿膜式有什么区别？',
+    category: '设备',
+    answer: '<p><b>加湿量计算公式：</b></p>' +
+      '<div class="step-formula">加湿量 = ṁ × (W₂ − W₁) × 3600 / 1000 (kg/h)</div>' +
+      '<p><b>电极式 vs 湿膜式对比：</b></p>' +
+      '<table class="air-state-table"><tr><th>特性</th><th>电极式</th><th>湿膜式</th></tr>' +
+      '<tr><td class="param-name">加湿原理</td><td>电极加热水产生蒸汽</td><td>水在湿膜上蒸发</td></tr>' +
+      '<tr><td class="param-name">能耗</td><td>高（1kW 产 1.3kg 蒸汽）</td><td>低（仅水泵耗电）</td></tr>' +
+      '<tr><td class="param-name">响应速度</td><td>快（3~5 分钟）</td><td>慢（10~20 分钟）</td></tr>' +
+      '<tr><td class="param-name">维护</td><td>需定期清洗电极（1~3 月）</td><td>需清洗湿膜（3~6 月）</td></tr>' +
+      '<tr><td class="param-name">适用</td><td>湿度控制精度要求高</td><td>节能型、湿度要求一般</td></tr></table>' +
+      '<div class="engineering-exp"><strong>安装位置：</strong>加热器之后、风机之前。蒸汽分配管距上游 ≥500mm，距风机 ≥1000mm。</div>'
+  },
+
+  // ===== 5. 标准类 =====
+  {
+    tags: ['标准', '规范'],
+    keywords: ['引用标准', '国标', 'GB', '规范', '标准号'],
+    question: 'AHU 设计计算引用了哪些国家标准？',
+    category: '标准',
+    answer: '<p>本软件引用的主要国家标准：</p>' +
+      '<table class="air-state-table"><tr><th>标准号</th><th>标准名称</th><th>引用内容</th></tr>' +
+      '<tr><td><b>GB/T 35226-2017</b></td><td>湿空气性质计算公式</td><td>Magnus 饱和水汽压公式、空气密度</td></tr>' +
+      '<tr><td><b>GB 50736-2012</b></td><td>民用建筑供暖通风与空气调节设计规范</td><td>焓差法负荷计算、空调系统设计</td></tr>' +
+      '<tr><td><b>GB/T 14294-2008</b></td><td>组合式空调机组</td><td>设备选型、箱体结构、漏风率</td></tr>' +
+      '<tr><td><b>GB 50019-2015</b></td><td>工业建筑供暖通风与空气调节设计规范</td><td>风速选取、风管设计</td></tr>' +
+      '<tr><td><b>GB/T 3280-2015</b></td><td>不锈钢冷轧钢板和钢带</td><td>箱体外板材料</td></tr>' +
+      '<tr><td><b>GB/T 2518-2019</b></td><td>连续热镀锌钢板和钢带</td><td>箱体内板材料</td></tr>' +
+      '<tr><td><b>GB/T 5237-2017</b></td><td>铝合金建筑型材</td><td>框架材料</td></tr>' +
+      '<tr><td><b>GB/T 21558-2008</b></td><td>建筑绝热用硬质聚氨酯泡沫塑料</td><td>保温材料</td></tr>' +
+      '<tr><td><b>GB/T 706-2016</b></td><td>热轧型钢</td><td>底座槽钢</td></tr>' +
+      '<tr><td><b>GB/T 14683-2017</b></td><td>硅酮和改性硅酮建筑密封胶</td><td>箱体密封</td></tr>' +
+      '<tr><td><b>GB/T 23341.1-2018</b></td><td>涡轮增压器 第1部分：一般技术条件</td><td>测试台进气要求</td></tr></table>'
+  },
+  {
+    tags: ['标准', '规范'],
+    keywords: ['测试标准', '测试台', '涡轮增压器', '温度精度', '湿度精度'],
+    question: '涡轮增压器测试台对进气参数有什么要求？',
+    category: '标准',
+    answer: '<p>依据 GB/T 23341.1-2018《涡轮增压器 第1部分：一般技术条件》及相关规范，测试台进气参数要求：</p>' +
+      '<table class="air-state-table"><tr><th>参数</th><th>要求值</th><th>控制精度</th></tr>' +
+      '<tr><td class="param-name">进气温度</td><td class="highlight">20℃ ±5℃（推荐 20℃）</td><td>控制精度 ±0.5℃</td></tr>' +
+      '<tr><td class="param-name">进气湿度</td><td class="highlight">50%RH ±20%RH（推荐 50%）</td><td>控制精度 ±3%RH</td></tr>' +
+      '<tr><td class="param-name">进气压力</td><td>标准大气压 ±0.5kPa</td><td>控制精度 ±0.2kPa</td></tr></table>' +
+      '<div class="physical-meaning"><b>设计目标：</b>AHU 系统需在上述精度范围内稳定控温控湿，确保涡轮增压器测试结果的准确性和可重复性。</div>'
+  },
+
+  // ===== 6. 操作类 =====
+  {
+    tags: ['操作', '使用'],
+    keywords: ['如何', '使用', '操作', '用法', '指南'],
+    question: '如何使用本软件进行 AHU 设计计算？',
+    category: '操作',
+    answer: '<p><b>使用流程：</b></p><ol>' +
+      '<li><b>第一步 — 输入参数：</b>在"参数计算"页面输入质量流量、入口温湿度、出口温湿度、大气压力</li>' +
+      '<li><b>第二步 — 预设工况：</b>可使用"夏季极端"、"冬季极端"、"标准工况"快速预设</li>' +
+      '<li><b>第三步 — 开始计算：</b>点击"开始计算"按钮，查看结果摘要、空气状态参数、物理意义解释</li>' +
+      '<li><b>第四步 — 查看详细：</b>下拉查看详细计算过程（6步）和结构设计计算（步骤7~10）</li>' +
+      '<li><b>第五步 — 设备选型：</b>切换到"设备选型建议"标签，查看设备推荐和工艺流程图</li>' +
+      '<li><b>第六步 — 导出报告：</b>点击"导出 Excel 报告"保存完整计算过程</li>' +
+      '<li><b>第七步 — 导出图纸：</b>在设备选型页面点击"导出 PDF"保存工程制图</li></ol>'
+  },
+  {
+    tags: ['操作', '使用'],
+    keywords: ['报告', '导出', 'Excel', '保存'],
+    question: '如何导出计算报告？报告包含哪些内容？',
+    category: '操作',
+    answer: '<p>点击结果区上方的 <b>"📊 导出 Excel 报告"</b>按钮即可导出。</p>' +
+      '<p><b>报告包含以下内容：</b></p><ol>' +
+      '<li>设计边界条件（输入参数）</li>' +
+      '<li>入口空气参数计算结果</li>' +
+      '<li>出口空气参数计算结果</li>' +
+      '<li>负荷计算结果（制冷量、加热量、除湿量）</li>' +
+      '<li>冷冻水流量与电加热功率计算</li>' +
+      '<li><b>结构尺寸设计</b>（新增）</li>' +
+      '<li>设备选型建议（含安全系数）</li>' +
+      '<li>计算公式及原理说明</li>' +
+      '<li>引用国标及行业标准</li></ol>' +
+      '<p>在 Electron 桌面版中，导出时会弹出文件保存对话框，可选择保存位置。</p>'
+  },
+  {
+    tags: ['操作', '使用'],
+    keywords: ['流程图', 'PFD', 'P&ID', '图纸', '导出PDF', '导出SVG'],
+    question: '如何导出工艺流程图？支持哪些格式？',
+    category: '操作',
+    answer: '<p>在"设备选型建议"页面，每张流程图下方有两个按钮：</p>' +
+      '<ul>' +
+      '<li><b>📄 导出 PDF</b> — 生成 A4 横向 PDF 文件，可直接打印或归档（推荐）</li>' +
+      '<li><b>✏ 导出 SVG（可编辑）</b> — 保留矢量格式，可用 Illustrator、Inkscape 等编辑</li></ul>' +
+      '<p><b>可导出的流程图（共 4 张）：</b></p><ul>' +
+      '<li>AHU 空气处理工艺流程图（PFD）</li>' +
+      '<li>水系统工艺流程图（P&amp;ID）</li>' +
+      '<li>电气控制流程图</li>' +
+      '<li>系统调试工艺流程图</li></ul>' +
+      '<p>所有图纸均已按 <b>GB/T 14689-2008</b> 标准添加图框和标题栏（图名、图号、比例、日期、设计、审核、版本）。</p>'
+  }
+];
+
+function qaSearch(query) {
+  query = query.toLowerCase().trim();
+  if (!query) return [];
+  var tokens = query.split(/[\s,，、]+/).filter(function(t) { return t.length > 0; });
+  var scores = [];
+  for (var i = 0; i < qaKnowledge.length; i++) {
+    var item = qaKnowledge[i];
+    var score = 0;
+    for (var j = 0; j < tokens.length; j++) {
+      var tok = tokens[j];
+      for (var k = 0; k < item.keywords.length; k++) {
+        if (item.keywords[k].toLowerCase().indexOf(tok) !== -1) {
+          score += 3;
+        }
+      }
+      if (item.question.toLowerCase().indexOf(tok) !== -1) {
+        score += 2;
+      }
+      if (item.answer.toLowerCase().indexOf(tok) !== -1) {
+        score += 1;
+      }
+      for (var t = 0; t < (item.tags || []).length; t++) {
+        if (item.tags[t].toLowerCase().indexOf(tok) !== -1) {
+          score += 2;
+        }
+      }
+    }
+    if (score > 0) {
+      scores.push({ index: i, score: score });
+    }
+  }
+  scores.sort(function(a, b) { return b.score - a.score; });
+  var results = [];
+  var maxResults = Math.min(3, scores.length);
+  for (var i = 0; i < maxResults; i++) {
+    results.push(qaKnowledge[scores[i].index]);
+  }
+  return results;
+}
+
+function sendQuestion() {
+  var input = document.getElementById('qaInput');
+  var query = input.value.trim();
+  if (!query) return;
+
+  var messages = document.getElementById('qaMessages');
+  messages.appendChild(buildMessage('user', query));
+
+  var results = qaSearch(query);
+  if (results.length === 0) {
+    messages.appendChild(buildMessage('bot',
+      '<p>抱歉，未找到与"<b>' + escapeXml(query) + '</b>"相关的答案。请尝试换一种问法，或点击上方标签选择常见问题。</p>' +
+      '<div class="engineering-exp" style="margin-top:6px;"><strong>💡 建议：</strong>您可以使用"公式"、"原理"、"设计"、"设备"、"标准"等关键词缩小搜索范围。</div>'
+    ));
+  } else {
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var ansHtml = '<div style="font-size:0.82rem;color:#718096;margin-bottom:6px;">💡 相关度排名 #' + (i + 1) + ' — 分类：' + r.category + '</div>' + r.answer;
+      messages.appendChild(buildMessage('bot', ansHtml));
+    }
+  }
+
+  input.value = '';
+  messages.scrollTop = messages.scrollHeight;
+  document.getElementById('statusText').textContent = '问答：已回复 "' + query + '"';
+}
+
+function buildMessage(type, content) {
+  var div = document.createElement('div');
+  div.className = 'qa-message qa-' + type;
+  var avatar = type === 'user' ? '👤' : '🤖';
+  var bubbleClass = type === 'user' ? 'qa-bubble qa-bubble-user' : 'qa-bubble';
+  div.innerHTML = '<div class="qa-avatar">' + avatar + '</div><div class="' + bubbleClass + '">' + content + '</div>';
+  return div;
+}
+
+function clearQaChat() {
+  var messages = document.getElementById('qaMessages');
+  messages.innerHTML = '<div class="qa-message qa-bot">' +
+    '<div class="qa-avatar">🤖</div>' +
+    '<div class="qa-bubble"><p>您好！我是 AHU 设计计算助手，您可以问我以下类型的问题：</p>' +
+    '<ul style="margin:4px 0 0 16px;font-size:0.85rem;">' +
+    '<li><strong>公式类</strong> — 如"制冷量怎么算"、"饱和水汽压公式"</li>' +
+    '<li><strong>原理类</strong> — 如"什么是焓"、"含湿量是什么"</li>' +
+    '<li><strong>设计类</strong> — 如"风速怎么选"、"AHU 总长度"</li>' +
+    '<li><strong>设备类</strong> — 如"表冷器怎么选"、"风机选型"</li>' +
+    '<li><strong>标准类</strong> — 如"引用哪些国标"、"漏风率要求"</li>' +
+    '</ul></div></div>';
+  document.getElementById('statusText').textContent = '问答对话已清空';
+}
+
+function exportQaChat() {
+  var messages = document.getElementById('qaMessages').querySelectorAll('.qa-message');
+  if (messages.length <= 1) {
+    alert('暂无问答记录可导出');
+    return;
+  }
+
+  var now = new Date();
+  var dateStr = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+  var timeStr = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+
+  var html = '<html><head><meta charset="UTF-8"><title>AHU问答记录</title>' +
+    '<style>body{font-family:Microsoft YaHei,sans-serif;padding:20px;max-width:800px;margin:0 auto;}' +
+    'h1{font-size:18px;color:#2d3748;border-bottom:2px solid #3182ce;padding-bottom:8px;}' +
+    '.qa-item{border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin:10px 0;}' +
+    '.qa-user{background:#ebf8ff;border-left:3px solid #3182ce;}' +
+    '.qa-bot{background:#f7fafc;border-left:3px solid #48bb78;}' +
+    '.qa-label{font-size:12px;color:#718096;margin-bottom:4px;}' +
+    '.qa-content{font-size:14px;line-height:1.7;color:#4a5568;}' +
+    'table{border-collapse:collapse;margin:8px 0;width:100%;font-size:13px;}' +
+    'th,td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left;}' +
+    'th{background:#edf2f7;}' +
+    '.formula{background:#fffff0;padding:6px 12px;border-left:3px solid #f6e05e;margin:6px 0;font-family:Consolas,monospace;}' +
+    '.std-ref{background:#f0fff4;padding:6px 12px;border-left:3px solid #48bb78;margin:6px 0;font-size:13px;color:#276749;}' +
+    '.exp{border-left:3px solid #ed8936;padding:6px 12px;margin:6px 0;font-size:13px;}' +
+    'ul,ol{margin:4px 0;padding-left:20px;}li{margin:2px 0;}</style></head><body>' +
+    '<h1>💬 AHU 设计计算问答记录</h1>' +
+    '<p style="color:#718096;font-size:14px;">导出时间：' + dateStr + ' ' + timeStr + '</p>';
+
+  for (var i = 0; i < messages.length; i++) {
+    var cls = messages[i].classList.contains('qa-user') ? 'qa-user' : 'qa-bot';
+    var label = messages[i].classList.contains('qa-user') ? '👤 您的问题' : '🤖 系统回答';
+    var content = messages[i].querySelector('.qa-bubble').innerHTML;
+    html += '<div class="qa-item ' + cls + '"><div class="qa-label">' + label + '</div><div class="qa-content">' + content + '</div></div>';
+  }
+
+  html += '<p style="color:#a0aec0;font-size:12px;margin-top:20px;">由"进气空调设计计算器"自动生成</p></body></html>';
+
+  try {
+    require('electron');
+    var { ipcRenderer } = require('electron');
+    var fileName = 'AHU_问答记录_' + dateStr + '.html';
+    ipcRenderer.send('save-excel-file', { content: html, fileName: fileName });
+    ipcRenderer.once('save-excel-reply', function(event, reply) {
+      if (reply.success) {
+        document.getElementById('statusText').textContent = '问答记录已保存至：' + reply.path;
+      } else {
+        document.getElementById('statusText').textContent = '保存失败：' + reply.error;
+      }
+    });
+  } catch (e) {
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'AHU_问答记录_' + dateStr + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('statusText').textContent = '问答记录已下载';
+  }
+}
+
+function initQuickTags() {
+  var tags = [
+    '制冷量怎么算',
+    '饱和水汽压公式',
+    '什么是焓',
+    '风速推荐值',
+    '表冷器选型',
+    '引用哪些标准',
+    '如何导出报告',
+    'AHU 总长度'
+  ];
+  var container = document.getElementById('qaQuickTags');
+  for (var i = 0; i < tags.length; i++) {
+    var tag = document.createElement('button');
+    tag.className = 'qa-tag';
+    tag.textContent = tags[i];
+    tag.onclick = (function(q) {
+      return function() {
+        document.getElementById('qaInput').value = q;
+        sendQuestion();
+      };
+    })(tags[i]);
+    container.appendChild(tag);
+  }
+}
+
+// ==========================================
+// 十一、工程制图标准图框与标题栏 (GB/T 14689-2008)
 // ==========================================
 
 function escapeXml(s) {

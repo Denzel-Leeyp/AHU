@@ -17,6 +17,7 @@
       <button class="tab-btn" onclick="switchTab('guide')">设计指南</button>
       <button class="tab-btn" onclick="switchTab('knowledge')">知识库</button>
       <button class="tab-btn" onclick="switchTab('selection')">设备选型建议</button>
+      <button class="tab-btn" onclick="switchTab('qa')">💬 在线问答</button>
     </div>
     <div id="tab-calc" class="tab-content active">
       <main class="two-col">
@@ -179,6 +180,38 @@
         <p class="guide-intro">基于当前计算结果，推荐以下设备配置方案：</p>
         <div id="selectionResults">
           <p class="placeholder">请先在"参数计算"页面进行计算</p>
+        </div>
+      </section>
+    </div>
+    <div id="tab-qa" class="tab-content">
+      <section class="qa-panel">
+        <h2>💬 在线问答</h2>
+        <p class="guide-intro">输入您关于 AHU 设计计算的问题，系统将基于内置知识库为您实时解答。<br>支持：公式查询、标准解释、设计原理、设备选型等。<br>点击下方标签可快速提问。</p>
+        <div class="qa-layout">
+          <div class="qa-main">
+            <div class="qa-quick-tags" id="qaQuickTags"></div>
+            <div class="qa-messages" id="qaMessages">
+              <div class="qa-message qa-bot">
+                <div class="qa-avatar">🤖</div>
+                <div class="qa-bubble">
+                  <p>您好！我是 AHU 设计计算助手，您可以问我以下类型的问题：</p>
+                  <ul style="margin:4px 0 0 16px;font-size:0.85rem;">
+                    <li><strong>公式类</strong> — 如"制冷量怎么算"、"饱和水汽压公式"</li>
+                    <li><strong>原理类</strong> — 如"什么是焓"、"含湿量是什么"</li>
+                    <li><strong>设计类</strong> — 如"风速怎么选"、"AHU 总长度"</li>
+                    <li><strong>设备类</strong> — 如"表冷器怎么选"、"风机选型"</li>
+                    <li><strong>标准类</strong> — 如"引用哪些国标"、"漏风率要求"</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="qa-input-area">
+              <input type="text" id="qaInput" class="qa-input" placeholder="输入您的问题，按 Enter 发送..." onkeydown="if(event.key==='Enter') sendQuestion()">
+              <button class="qa-send-btn" onclick="sendQuestion()">发送</button>
+              <button class="qa-clear-btn" onclick="clearQaChat()">清空</button>
+              <button class="qa-export-btn" onclick="exportQaChat()">📄 导出问答记录</button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
