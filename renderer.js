@@ -75,6 +75,7 @@ function switchTab(tabName) {
 
   // 切换到在线问答时初始化
   if (tabName === "qa") {
+    initQaInput();
     if (document.getElementById('qaQuickTags').children.length === 0) {
       initQuickTags();
     }
@@ -3640,26 +3641,23 @@ var qaKnowledge = [
   },
   {
     tags: ['设备', '设计'],
-    keywords: ['风机位置', '风机安装', '为什么风机在最后', '风机在出风口', '负压', '正压'],
-    question: '为什么风机要安装在出风口（末端），不能放在加热器前面？',
+    keywords: ['风机位置', '风机安装', '风机在前面', '风机在末端', '负压', '正压', '抽风式', '送风式', 'draw-through', 'blow-through'],
+    question: 'AHU 中风机放在什么位置？有标准要求吗？',
     category: '设备',
-    answer: '<p>风机放在 AHU 出风口末端（而非中间）是经过长期工程实践验证的最优方案，主要有以下原因：</p>' +
-      '<div class="physical-meaning"><b>一、气流均匀性（最关键）</b></div>' +
-      '<p>风机在末端抽风 → 整个 AHU 箱体内处于<b>负压状态</b> → 空气被均匀拉过各功能段（过滤器→表冷器→加热器→加湿器）→ 气流分布稳定。<br>' +
-      '反之，风机在中间 → 前面段正压、后面段负压 → 气流在表冷器和加热器处偏流 → 换热效率下降、局部过热。</p>' +
-      '<div class="physical-meaning"><b>二、防过热</b></div>' +
-      '<p>风机在末端 → 空气经过加热器时已被风机前方负压加速 → 风速高、换热均匀 → 发热管表面温度低。<br>' +
-      '反之，风机在加热器前 → 加热器在正压段低速区 → 空气流速低 → 发热管局部过热烧毁（表面负荷超 3W/cm²）。</p>' +
-      '<div class="physical-meaning"><b>三、噪音控制</b></div>' +
-      '<p>风机在末端 → 噪音被箱体和消音器隔离在内部 → 出风口到测试台之间有直管段 + 消音器 → 传出的噪音最小。<br>' +
-      '反之，风机在中间 → 噪音通过前后风管传播 → 难以隔离。</p>' +
-      '<div class="physical-meaning"><b>四、维护便利性</b></div>' +
-      '<p>风机在末端靠近检修门 → 电机、轴承、皮带维护方便。<br>' +
-      '反之，风机夹在中间 → 前后都需拆开才能检修。</p>' +
-      '<div class="engineering-exp"><strong>标准气流顺序：</strong><br>' +
-      '进风口 → 初效过滤器 → 表冷器 → 电加热器 → 加湿器 → <b>送风机</b> → 出风口<br><br>' +
-      '<b>唯一例外：</b>洁净室用正压 AHU，风机放在最前面（增压风机），但需特殊的高风速加热器配合。</div>' +
-      '<div class="standards-ref">行业共识：GB/T 14294-2008《组合式空调机组》标准配置均为抽风式（风机在末端）</div>'
+    answer: '<p>风机在 AHU 中的布置方式主要有<b>两种</b>，各有利弊，国标中未作强制性规定：</p>' +
+      '<table class="air-state-table"><tr><th>对比项</th><th>抽风式 (Draw-through)<br>风机在末端</th><th>送风式 (Blow-through)<br>风机在前面</th></tr>' +
+      '<tr><td class="param-name">气流段状态</td><td>表冷器/加热器在<b>负压段</b></td><td>表冷器/加热器在<b>正压段</b></td></tr>' +
+      '<tr><td class="param-name">气流分布</td><td>各功能段负压均匀，气流稳定</td><td>风机出口气流需加均流板</td></tr>' +
+      '<tr><td class="param-name">加热器</td><td>负压侧风速均匀，不易过热</td><td>正压侧需注意风速分布，避免局部高温</td></tr>' +
+      '<tr><td class="param-name">噪音</td><td>风机在末端，噪音易隔离</td><td>风机在前面，噪音沿风管传播</td></tr>' +
+      '<tr><td class="param-name">维护</td><td>风机在末端，靠近检修门</td><td>风机在前面，也便于检修</td></tr>' +
+      '<tr><td class="param-name">典型应用</td><td>大多数舒适性 AHU、测试台</td><td>洁净室、需要正压的场合</td></tr></table>' +
+      '<div class="step-formula" style="font-style:italic;"><b>抽风式（常用）：</b>进风口 → 过滤器 → 表冷器 → 加热器 → 加湿器 → <b>送风机</b> → 出风口</div>' +
+      '<div class="step-formula" style="font-style:italic;"><b>送风式（洁净室用）：</b>进风口 → 过滤器 → <b>送风机</b> → 表冷器 → 加热器 → 加湿器 → 出风口</div>' +
+      '<div class="engineering-exp"><b>总结：</b>两种方案都是成熟的设计，国标中并未规定风机必须放在哪个位置。<br>' +
+      '抽风式因气流均匀、便于消音，在绝大多数舒适性空调和测试台 AHU 中使用更广泛。<br>' +
+      '送风式在需要箱体内维持正压（如洁净室）或有特殊气流组织要求时采用。<br>' +
+      '具体选型应根据项目实际需求、设备制造商建议和设计经验综合确定。</div>'
   },
   {
     tags: ['设备', '选型'],
@@ -3847,7 +3845,7 @@ function clearQaChat() {
     '<li><strong>公式类</strong> — 如"制冷量怎么算"、"饱和水汽压公式"</li>' +
     '<li><strong>原理类</strong> — 如"什么是焓"、"含湿量是什么"</li>' +
     '<li><strong>设计类</strong> — 如"风速怎么选"、"AHU 总长度"</li>' +
-    '<li><strong>设备类</strong> — 如"表冷器怎么选"、"风机位置"</li>' +
+    '<li><strong>设备类</strong> — 如"表冷器怎么选"、"风机位置"</li>
     '<li><strong>标准类</strong> — 如"引用哪些国标"、"漏风率要求"</li>' +
     '</ul></div></div>';
   document.getElementById('statusText').textContent = '问答对话已清空';
@@ -4022,6 +4020,19 @@ function importAiAnswer() {
   document.getElementById('statusText').textContent = 'AI 回答已导入';
 }
 
+function initQaInput() {
+  var input = document.getElementById('qaInput');
+  if (input && !input._listenerAttached) {
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuestion();
+      }
+    });
+    input._listenerAttached = true;
+  }
+}
+
 function initQuickTags() {
   var tags = [
     '制冷量怎么算',
@@ -4029,7 +4040,7 @@ function initQuickTags() {
     '什么是焓',
     '风速推荐值',
     '表冷器选型',
-    '风机为什么在末端',
+    '风机位置有要求吗',
     '引用哪些标准',
     '如何导出报告',
     'AHU 总长度'
