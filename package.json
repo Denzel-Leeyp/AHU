@@ -23,6 +23,8 @@
       "renderer.js",
       "calculations.js",
       "tutorial.js",
+      "extreme.js",
+      "component_design.js",
       "styles.css",
       "node_modules/**/*"
     ],

@@ -1,0 +1,281 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 700" width="900" height="700">
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2196F3"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#F44336"/>
+    </marker>
+    <marker id="arrowDim" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+    <!-- 铜管颜色渐变 -->
+    <linearGradient id="tubeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#D4875A"/>
+      <stop offset="50%" stop-color="#B87333"/>
+      <stop offset="100%" stop-color="#8B5E3C"/>
+    </linearGradient>
+    <!-- 翅片颜色渐变 -->
+    <linearGradient id="finGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#C0C0C0"/>
+      <stop offset="100%" stop-color="#909090"/>
+    </linearGradient>
+    <!-- 面板渐变 -->
+    <linearGradient id="panelGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8E8E8"/>
+      <stop offset="100%" stop-color="#B0B0B0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ==================== 标题 ==================== -->
+  <text x="450" y="35" text-anchor="middle" font-size="22" font-weight="bold" fill="#222">表冷器 3D 示意图 — 气流方向与管道布置</text>
+  <text x="450" y="58" text-anchor="middle" font-size="14" fill="#555">表冷器翅片管束几何关系，空气横掠管束流动</text>
+
+  <!-- ==================== 主图：等轴测图 ==================== -->
+  <!-- 坐标：用等轴测投影 (等角投影) -->
+  <!-- 原点 (front-bottom-left corner) -->
+  <!-- 沿W方向(水平管长): x增加, y不变 -->
+  <!-- 沿H方向(高度): x减少, y减少 -->
+  <!-- 沿Depth方向(深度/气流): x增加, y减少 -->
+
+  <!-- 角度参数 -->
+  <!-- W轴: dx_W = +1.0, dy_W = +0.35 (右偏上) -->
+  <!-- H轴: dx_H = +0.0, dy_H = -1.0 (正上) -->
+  <!-- Depth轴: dx_D = +1.0, dy_D = -0.35 (右偏下) -->
+
+  <!-- 起算原点 -->
+  <!-- x0, y0 = 左下前角 -->
+
+  <!-- 缩放因子 -->
+  <!-- W scale: 280 -->
+  <!-- H scale: 200 -->
+  <!-- D scale: 180 -->
+
+  <!-- W_length = 280, H_length = 200, D_length = 180 -->
+
+  <!-- 等轴测变换 -->
+  <!-- 点P(x,y,z) (x沿W, y沿H从下往上, z沿Depth从前向后) -->
+  <!-- screenX = cx + x*1.0 + z*1.0 -->
+  <!-- screenY = cy + x*0.35 - y*1.0 - z*0.35 -->
+
+  <!-- 使用更清晰的半等轴测投影: 
+       X轴(宽): (1, 0.25) 
+       Y轴(高): (0, -1)
+       Z轴(深): (1, -0.25) -->
+
+  <!-- 面板尺寸 -->
+  <g transform="translate(80, 470)">
+    <!-- 前置参数 -->
+    <!-- W方向: dx=1, dy=-0.25, 长度280 -->
+    <!-- H方向: dx=0, dy=-1, 长度200 -->
+    <!-- D方向: dx=1, dy=0.25, 长度200 -->
+
+    <!-- ==== 线框整体 ==== -->
+    <!-- 前方(空气入口)面：左侧面 -->
+    <!-- 前下边 (W): (0,0) -> (280,-70) -->
+    <!-- 前左边 (H): (0,0) -> (0,-200) -->
+    <!-- 后下边 (D): (0,0) -> (200,50) -->
+
+    <!-- 后面点位置 -->
+    <!-- 后下右: (280+200, -70+50) = (480,-20) -->
+    <!-- 后上右: (280+200, -70-200+50) = (480,-220) -->
+    <!-- 后上左: (200, -200+50) = (200,-150) -->
+
+    <!-- 前面(入口)点 -->
+    <!-- 前下右: (280, -70) -->
+    <!-- 前上右: (280, -70-200) = (280,-270) -->
+    <!-- 前上左: (0, -200) -->
+
+    <!-- ======== 实体绘制 ======== -->
+
+    <!-- === 翅片 (Fins) === -->
+    <!-- 沿深度方向绘制4排翅片 -->
+    <g stroke="#888" stroke-width="0.5" opacity="0.3">
+      <!-- 每排：沿W方向绘制多个竖直翅片 -->
+      <!-- z从0到200, 步长50 -->
+      <g fill="none">
+        <!-- 第1排 z=0 (前表面) -->
+        <!-- 第2排 z=50 -->
+        <!-- 第3排 z=100 -->
+        <!-- 第4排 z=150 -->
+        <!-- 第5排 z=200 (后表面) -->
+      </g>
+    </g>
+
+    <!-- 绘制一些半透明的翅片平面作为视觉效果 -->
+    <g fill="#C8C8C8" fill-opacity="0.15" stroke="#999" stroke-width="0.5">
+      <!-- 第1排翅片 (前) -->
+      <rect x="10" y="-195" width="260" height="190" rx="2" 
+            transform="skewY(14)" fill="#D0D0D0" fill-opacity="0.12"/>
+      <!-- 第2排 -->
+      <rect x="60" y="-195" width="260" height="190" rx="2" 
+            transform="skewY(14)" fill="#D0D0D0" fill-opacity="0.12"/>
+      <!-- 第3排 -->
+      <rect x="110" y="-195" width="260" height="190" rx="2" 
+            transform="skewY(14)" fill="#D0D0D0" fill-opacity="0.12"/>
+      <!-- 第4排 -->
+      <rect x="160" y="-195" width="260" height="190" rx="2" 
+            transform="skewY(14)" fill="#D0D0D0" fill-opacity="0.12"/>
+    </g>
+
+    <!-- === 铜管 === -->
+    <!-- 每排铜管，上下布置 -->
+    <!-- 沿H方向布置5根管 -->
+    <!-- y位置: -30, -70, -110, -150, -190 -->
+    <!-- 每根管沿W方向从x=10到x=270 -->
+
+    <!-- 第1排 (z=0) 前 -->
+    <g fill="none" stroke="#B87333" stroke-width="6" opacity="0.6">
+      <line x1="10" y1="-30" x2="270" y2="-95"/>
+      <line x1="10" y1="-70" x2="270" y2="-135"/>
+      <line x1="10" y1="-110" x2="270" y2="-175"/>
+      <line x1="10" y1="-150" x2="270" y2="-215"/>
+      <line x1="10" y1="-190" x2="270" y2="-255"/>
+    </g>
+
+    <!-- 第2排 (z=50) 偏移 -->
+    <g fill="none" stroke="#B87333" stroke-width="6" opacity="0.6">
+      <line x1="60" y1="-30" x2="320" y2="-95"/>
+      <line x1="60" y1="-70" x2="320" y2="-135"/>
+      <line x1="60" y1="-110" x2="320" y2="-175"/>
+      <line x1="60" y1="-150" x2="320" y2="-215"/>
+      <line x1="60" y1="-190" x2="320" y2="-255"/>
+    </g>
+
+    <!-- 第3排 (z=100) -->
+    <g fill="none" stroke="#B87333" stroke-width="6" opacity="0.55">
+      <line x1="110" y1="-30" x2="370" y2="-95"/>
+      <line x1="110" y1="-70" x2="370" y2="-135"/>
+      <line x1="110" y1="-110" x2="370" y2="-175"/>
+      <line x1="110" y1="-150" x2="370" y2="-215"/>
+      <line x1="110" y1="-190" x2="370" y2="-255"/>
+    </g>
+
+    <!-- 第4排 (z=150) -->
+    <g fill="none" stroke="#B87333" stroke-width="6" opacity="0.5">
+      <line x1="160" y1="-30" x2="420" y2="-95"/>
+      <line x1="160" y1="-70" x2="420" y2="-135"/>
+      <line x1="160" y1="-110" x2="420" y2="-175"/>
+      <line x1="160" y1="-150" x2="420" y2="-215"/>
+      <line x1="160" y1="-190" x2="420" y2="-255"/>
+    </g>
+
+    <!-- 第5排 (z=200) 后 -->
+    <g fill="none" stroke="#B87333" stroke-width="6" opacity="0.45">
+      <line x1="210" y1="-30" x2="470" y2="-95"/>
+      <line x1="210" y1="-70" x2="470" y2="-135"/>
+      <line x1="210" y1="-110" x2="470" y2="-175"/>
+      <line x1="210" y1="-150" x2="470" y2="-215"/>
+      <line x1="210" y1="-190" x2="470" y2="-255"/>
+    </g>
+
+    <!-- === 轮廓线框 === -->
+    <!-- 前表面 -->
+    <polygon points="0,0 280,-70 280,-270 0,-200" fill="none" stroke="#555" stroke-width="2" stroke-dasharray="8,4"/>
+    <!-- 后表面 -->
+    <polygon points="200,50 480,-20 480,-220 200,-150" fill="none" stroke="#888" stroke-width="1.5"/>
+    <!-- 连接边 -->
+    <line x1="0" y1="0" x2="200" y2="50" stroke="#888" stroke-width="1.5"/>
+    <line x1="280" y1="-70" x2="480" y2="-20" stroke="#888" stroke-width="1.5"/>
+    <line x1="280" y1="-270" x2="480" y2="-220" stroke="#888" stroke-width="1.5"/>
+    <line x1="0" y1="-200" x2="200" y2="-150" stroke="#888" stroke-width="1.5"/>
+
+    <!-- === 标注文字 === -->
+
+    <!-- 空气气流方向（蓝色） -->
+    <!-- 入口箭头 -->
+    <line x1="-100" y1="-80" x2="-15" y2="-80" stroke="#2196F3" stroke-width="3" marker-end="url(#arrowBlue)"/>
+    <text x="-110" y="-75" font-size="16" font-weight="bold" fill="#2196F3" text-anchor="end">空气入口</text>
+    <!-- 出口箭头 -->
+    <line x1="460" y1="-120" x2="540" y2="-120" stroke="#2196F3" stroke-width="3" marker-end="url(#arrowBlue)"/>
+    <text x="550" y="-115" font-size="16" font-weight="bold" fill="#2196F3">空气出口</text>
+
+    <!-- 气流方向路径 -->
+    <text x="230" y="-180" font-size="14" fill="#2196F3" font-weight="bold">→ 气流方向 →</text>
+    <text x="230" y="-165" font-size="12" fill="#2196F3">(沿深度方向)</text>
+    <text x="230" y="-140" font-size="12" fill="#666">空气横掠管束</text>
+
+    <!-- ===== 重大标注：W 和 H ===== -->
+
+    <!-- 宽度 W 标注（管长方向） -->
+    <line x1="10" y1="15" x2="270" y2="-50" stroke="#E65100" stroke-width="2.5" marker-end="url(#arrowDim)" marker-start="url(#arrowDim)"/>
+    <rect x="60" y="-30" width="120" height="28" rx="5" fill="white" fill-opacity="0.9"/>
+    <text x="140" y="-11" text-anchor="middle" font-size="17" font-weight="bold" fill="#E65100">W (宽度)</text>
+    <text x="140" y="5" text-anchor="middle" font-size="11" fill="#E65100">铜管长度方向 / 管程方向</text>
+
+    <!-- 高度 H 标注（铜管垂直堆叠方向） -->
+    <line x1="-30" y1="0" x2="-30" y2="-200" stroke="#1565C0" stroke-width="2.5" marker-end="url(#arrowDim)" marker-start="url(#arrowDim)"/>
+    <rect x="-70" y="-115" width="55" height="60" rx="5" fill="white" fill-opacity="0.9"/>
+    <text x="-42" y="-97" text-anchor="middle" font-size="17" font-weight="bold" fill="#1565C0">H</text>
+    <text x="-42" y="-80" text-anchor="middle" font-size="13" fill="#1565C0">高度</text>
+    <text x="-42" y="-65" text-anchor="middle" font-size="11" fill="#1565C0">铜管垂直</text>
+    <text x="-42" y="-52" text-anchor="middle" font-size="11" fill="#1565C0">堆叠方向</text>
+
+    <!-- 孔数公式标注 -->
+    <rect x="100" y="-295" width="260" height="30" rx="6" fill="#FFF3E0" stroke="#E65100" stroke-width="1.5"/>
+    <text x="230" y="-275" text-anchor="middle" font-size="15" font-weight="bold" fill="#E65100">每排孔数 = H ÷ 管间距</text>
+
+    <!-- 深度/排数标注 -->
+    <line x1="490" y1="-30" x2="490" y2="40" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#arrowDim)" marker-start="url(#arrowDim)"/>
+    <rect x="495" y="-10" width="80" height="50" rx="5" fill="white" fill-opacity="0.9"/>
+    <text x="535" y="8" text-anchor="middle" font-size="15" font-weight="bold" fill="#2E7D32">深度</text>
+    <text x="535" y="25" text-anchor="middle" font-size="12" fill="#2E7D32">排数 × 排间距</text>
+
+    <!-- === 管间距标注 === -->
+    <line x1="10" y1="-70" x2="10" y2="-30" stroke="#9C27B0" stroke-width="2" marker-end="url(#arrowDim)" marker-start="url(#arrowDim)"/>
+    <text x="25" y="-45" font-size="13" font-weight="bold" fill="#9C27B0">管间距 S</text>
+
+    <!-- === 排间距标注 === -->
+    <line x1="350" y1="-95" x2="400" y2="-82" stroke="#FF6F00" stroke-width="2" marker-end="url(#arrowDim)" marker-start="url(#arrowDim)"/>
+    <text x="370" y="-90" font-size="12" font-weight="bold" fill="#FF6F00">排间距</text>
+
+  </g>
+
+  <!-- ==================== 底部图例 ==================== -->
+  <g transform="translate(80, 520)">
+    <rect x="0" y="0" width="740" height="140" rx="8" fill="#F5F5F5" stroke="#CCC" stroke-width="1"/>
+
+    <text x="370" y="22" text-anchor="middle" font-size="15" font-weight="bold" fill="#333">图例</text>
+
+    <!-- 图例项 -->
+    <g transform="translate(20, 35)">
+      <!-- 管程方向 -->
+      <line x1="0" y1="10" x2="50" y2="10" stroke="#E65100" stroke-width="3"/>
+      <circle cx="5" cy="10" r="3" fill="#E65100"/>
+      <circle cx="45" cy="10" r="3" fill="#E65100"/>
+      <text x="60" y="15" font-size="13" fill="#333">W (宽度) = 铜管长度方向 = 管程方向</text>
+    </g>
+
+    <g transform="translate(20, 62)">
+      <!-- 垂直方向 -->
+      <line x1="25" y1="0" x2="25" y2="30" stroke="#1565C0" stroke-width="3"/>
+      <circle cx="25" cy="2" r="3" fill="#1565C0"/>
+      <circle cx="25" cy="28" r="3" fill="#1565C0"/>
+      <text x="60" y="20" font-size="13" fill="#333">H (高度) = 铜管垂直堆叠方向 → 孔数/排 = H ÷ 管间距</text>
+    </g>
+
+    <g transform="translate(370, 35)">
+      <!-- 气流 -->
+      <line x1="0" y1="10" x2="50" y2="10" stroke="#2196F3" stroke-width="3" marker-end="url(#arrowBlue)"/>
+      <text x="60" y="15" font-size="13" fill="#333">空气流动方向 = 深度方向 (横掠管束)</text>
+    </g>
+
+    <g transform="translate(370, 62)">
+      <!-- 管子和翅片 -->
+      <line x1="0" y1="10" x2="30" y2="10" stroke="#B87333" stroke-width="6"/>
+      <text x="60" y="15" font-size="13" fill="#333">铜管 (管内走冷冻水/热水)</text>
+    </g>
+
+    <g transform="translate(370, 92)">
+      <rect x="0" y="3" width="30" height="14" rx="2" fill="#C8C8C8" fill-opacity="0.6" stroke="#999" stroke-width="0.5"/>
+      <text x="60" y="15" font-size="13" fill="#333">铝翅片 (增强换热面积)</text>
+    </g>
+
+    <g transform="translate(20, 92)">
+      <line x1="0" y1="10" x2="30" y2="10" stroke="#2E7D32" stroke-width="2.5"/>
+      <circle cx="0" cy="10" r="3" fill="#2E7D32"/>
+      <circle cx="30" cy="10" r="3" fill="#2E7D32"/>
+      <text x="60" y="15" font-size="13" fill="#333">深度方向 = 排数坐标系</text>
+    </g>
+  </g>
+</svg>

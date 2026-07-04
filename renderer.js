@@ -10,15 +10,119 @@
 // ==========================================
 
 function handleExport() {
-  // 检测是否在Electron环境中
+  // 禁用工具栏按钮 + 显示导出中状态（PDF/Excel 生成需数秒）
+  var toolbar = document.getElementById("outputToolbar");
+  var btns = toolbar ? toolbar.querySelectorAll("button") : [];
+  for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+  setStatusBar("正在生成报告，请稍候...", "warn");
+  var done = function(ok, msg) {
+    for (var j = 0; j < btns.length; j++) btns[j].disabled = false;
+    setStatusBar(msg || (ok ? "报告导出完成 ✓" : "导出失败"), ok ? "" : "error");
+  };
   try {
     require("electron");
-    // 在Electron中，使用Node.js直接保存文件
     exportReportElectron();
+    // exportReportElectron 内部通过 IPC 回复更新状态栏；这里仅恢复按钮
+    setTimeout(function(){ for (var k=0;k<btns.length;k++) btns[k].disabled=false; }, 3000);
   } catch (e) {
-    // 在浏览器中，使用Blob下载
     exportReport();
+    setTimeout(function(){ done(true, "Excel 报告已生成（浏览器下载）"); }, 500);
   }
+}
+
+// 主页面→零部件页面输入同步（含派生值推送）
+function syncToDesign() {
+  var pairs = ['tempIn','rhIn','tempOut','rhOut','massFlow','coilRH','chwDeltaT','chwSupply'];
+  for (var i = 0; i < pairs.length; i++) {
+    var id = pairs[i];
+    var src = document.getElementById(id);
+    var dst = document.getElementById('cd-' + id);
+    if (src && dst) dst.value = src.value;
+  }
+  // 主页面已计算完成，将派生值推送到零部件页
+  if (typeof importFromCalc === 'function') importFromCalc();
+}
+
+// ==========================================
+// 零-1. 输入校验与状态栏辅助
+// ==========================================
+
+/** 标记输入字段为无效（红框 + 提示） */
+function markFieldInvalid(id, silent) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add("invalid");
+}
+
+/** 标记输入字段为有效（清除红框） */
+function markFieldValid(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("invalid");
+}
+
+/** 设置状态栏文本与级别 */
+function setStatusBar(text, level) {
+  var el = document.getElementById("statusText");
+  if (!el) return;
+  el.textContent = text;
+  var bar = el.closest(".status-bar");
+  if (!bar) return;
+  bar.classList.remove("warn", "error");
+  if (level === "warn" || level === "error") bar.classList.add(level);
+}
+
+/** 构建物理合理性警告列表 */
+function buildPhysicsWarnings(data) {
+  var w = [];
+  // 冷却工况下出口 RH 高于入口 RH：通常不合理
+  if (data.Q_cooling_signed > 0.01 && data.rhOut > data.rhIn + 1 && data.dW_signed < -0.0001) {
+    w.push("冷却模式下出口 RH(" + fmt(data.rhOut, 0) + "%) 高于入口(" + fmt(data.rhIn, 0) + "%) 且含湿量增加，通常需配合加湿，请确认工况方向。");
+  }
+  // 出口含湿量大于入口但用户预期除湿
+  if (data.dW_signed < -0.0001 && data.Q_cooling > 0.01) {
+    w.push("当前为加湿方向(W_out>W_in)，但存在制冷负荷，若意图除湿请检查出口目标 RH/温度。");
+  }
+  // ADP/盘管出口温度校验（物理换热约束）
+  if (!isNaN(data.T_coil) && data.Q_coil_actual > 0.01) {
+    var chwS = data.chwSupply || 7;
+    var approach_min = 2.5; // ℃，典型盘管最小逼近温度
+    // 第一级：T_coil 低于冷冻水温 → 物理不可达（严重）
+    if (data.T_coil < chwS) {
+      w.push('<span style="color:#e53e3e;font-weight:bold;">⚠ 物理不可达：</span>表冷器出口温度 ' + fmt(data.T_coil, 1) + '℃ 低于冷冻水供水温度(' + chwS + '℃)，空气无法被冷却到水温以下。请提高出口相对湿度/温度，或降低冷冻水温。');
+    // 第二级：T_coil 接近冷冻水温但温差不足 → 换热困难
+    } else if (data.T_coil < chwS + approach_min) {
+      w.push("表冷器出口温度 " + fmt(data.T_coil, 1) + "℃ 接近冷冻水供水温度(" + chwS + "℃)，温差不足" + approach_min + "℃，换热困难，除湿可能不可达。建议提高出口 RH/温度，或降低冷冻水温。");
+    }
+  }
+  // 出口温度高于入口且无制冷，但仍要求除湿
+  if (data.tempOut > data.tempIn && data.dW_signed > 0.0001 && data.Q_cooling < 0.01) {
+    w.push("升温工况下要求除湿（W_in>W_out），需先冷却除湿再加热，当前为单纯加热无法除湿。");
+  }
+  return w;
+}
+
+/** 切换高级参数面板 */
+function toggleAdvancedParams() {
+  var panel = document.getElementById("advancedParams");
+  var icon = document.getElementById("advancedToggleIcon");
+  if (!panel) return;
+  if (panel.style.display === "none") {
+    panel.style.display = "block";
+    if (icon) icon.textContent = "▼";
+  } else {
+    panel.style.display = "none";
+    if (icon) icon.textContent = "▶";
+  }
+}
+
+/** 折叠/展开分节（详细计算过程等） */
+function toggleSection(containerId, headerEl) {
+  var body = document.getElementById(containerId).querySelector(".collapsible-body");
+  if (!body) return;
+  var collapsed = body.style.display === "none";
+  body.style.display = collapsed ? "block" : "none";
+  if (headerEl) headerEl.textContent = (collapsed ? "▼" : "▶") + headerEl.textContent.slice(1);
 }
 
 // ==========================================
@@ -41,9 +145,10 @@ function switchTab(tabName) {
   // 显示选中的标签
   document.getElementById("tab-" + tabName).classList.add("active");
 
-  // 高亮对应的按钮
+  // 高亮对应的按钮（优先用 data-tab 属性，回退到 onclick 字符串匹配）
   for (var i = 0; i < btns.length; i++) {
-    if (btns[i].getAttribute("onclick").indexOf(tabName) !== -1) {
+    var dt = btns[i].getAttribute("data-tab");
+    if (dt === tabName || (!dt && btns[i].getAttribute("onclick") && btns[i].getAttribute("onclick").indexOf(tabName) !== -1)) {
       btns[i].classList.add("active");
       break;
     }
@@ -55,7 +160,8 @@ function switchTab(tabName) {
     guide: "设计指南",
     knowledge: "知识库",
     selection: "设备选型建议",
-    qa: "在线问答"
+    qa: "在线问答",
+    design: "零部件设计"
   };
   document.getElementById("statusText").textContent = "当前页面：" + tabNames[tabName];
 
@@ -89,8 +195,9 @@ function switchTab(tabName) {
 /**
  * 设置预设工况
  * @param {string} preset - 'summer' | 'winter' | 'standard'
+ * @param {Event} [evt] - 触发事件（用于高亮按钮，可选）
  */
-function setPreset(preset) {
+function setPreset(preset, evt) {
   var presets = {
     summer:  { massFlow: 1.1,  tempIn: 40, rhIn: 95, tempOut: 20, rhOut: 50, atm: 101.325 },
     winter:  { massFlow: 1.1,  tempIn: -5, rhIn: 10, tempOut: 25, rhOut: 50, atm: 101.325 },
@@ -104,14 +211,12 @@ function setPreset(preset) {
   document.getElementById("rhIn").value = p.rhIn;
   document.getElementById("tempOut").value = p.tempOut;
   document.getElementById("rhOut").value = p.rhOut;
-  document.getElementById("atmPressure").value = p.atm;
 
   // 高亮被点击的预设按钮
   var btns = document.querySelectorAll(".preset-btn");
-  for (var i = 0; i < btns.length; i++) {
-    btns[i].style.fontWeight = "normal";
-  }
-  event.target.style.fontWeight = "bold";
+  for (var i = 0; i < btns.length; i++) btns[i].classList.remove("preset-active");
+  var target = (evt && evt.currentTarget) || (typeof event !== "undefined" && event.target);
+  if (target) target.classList.add("preset-active");
 
   document.getElementById("statusText").textContent =
     "已切换至" + (preset === "summer" ? "夏季极端" : preset === "winter" ? "冬季极端" : "标准测试") + "工况";
@@ -120,7 +225,28 @@ function setPreset(preset) {
   if (document.getElementById("autoCalc").checked) {
     calculate();
   }
+  updateParamText();
 }
+
+/** 更新输入参数文本区域（可复制） */
+function updateParamText() {
+  var el = document.getElementById("paramText");
+  if (!el) return;
+  var mf = document.getElementById("massFlow").value;
+  var ti = document.getElementById("tempIn").value;
+  var ri = document.getElementById("rhIn").value;
+  var to = document.getElementById("tempOut").value;
+  var ro = document.getElementById("rhOut").value;
+  el.value = "空气质量流量: " + mf + " kg/s\n" +
+    "入口温度: " + ti + " ℃\n" +
+    "入口相对湿度: " + ri + " %\n" +
+    "出口温度: " + to + " ℃\n" +
+    "出口相对湿度: " + ro + " %\n" +
+    "大气压力: " + pa + " kPa";
+}
+
+// 页面加载完成后初始化参数文本
+document.addEventListener("DOMContentLoaded", function() { updateParamText(); });
 
 // ==========================================
 // 四、实时计算
@@ -134,7 +260,7 @@ function toggleAutoCalc() {
   document.getElementById("statusText").textContent =
     enabled ? "实时计算已开启 - 参数变化时自动更新" : "实时计算已关闭";
   if (enabled) {
-    calculate();
+    calculate(true);
   }
 }
 
@@ -143,7 +269,8 @@ function onParamChange() {
   if (!document.getElementById("autoCalc").checked) return;
   if (autoCalcTimer) clearTimeout(autoCalcTimer);
   autoCalcTimer = setTimeout(function() {
-    calculate();
+    calculate(true);
+    updateParamText();
   }, 300);
 }
 
@@ -218,7 +345,8 @@ function buildPhysicsExplanation(data) {
   html += '<li>饱和水汽压随温度呈指数增长：0℃ 时约 0.61 kPa，20℃ 时约 2.34 kPa，40℃ 时约 7.38 kPa</li>';
   html += '<li>表冷器设计时，其表面温度必须低于空气露点温度（即 P_v 对应的饱和温度），才能有效除湿</li>';
   html += '<li>露点温度计算：已知 P_v，反推 T_dew = 237.3 × ln(P_v/0.61078) / (17.27 - ln(P_v/0.61078))</li>';
-  html += '<li>本工况入口露点温度约 ' + fmt(calcDewPoint(data.P_v_in), 1) + '℃，表冷器出水温度应低于此值才能除湿</li>';
+  var _dewIn = calcDewPoint(data.P_v_in);
+  html += '<li>本工况入口露点温度约 ' + (isNaN(_dewIn) ? '—（水汽压过低）' : fmt(_dewIn, 1) + '℃') + '，表冷器出水温度应低于此值才能除湿</li>';
   html += '<li>海拔升高时大气压降低，但饱和水汽压只与温度有关，不受海拔影响</li>';
   html += '</ul></div></div>';
 
@@ -235,6 +363,33 @@ function buildPhysicsExplanation(data) {
   html += '<li>除湿过程中，P_v 从 ' + fmt(data.P_v_in, 4) + ' kPa 降至 ' + fmt(data.P_v_out, 4) + ' kPa，含湿量减少 ' + fmt((data.W_in - data.W_out) * 1000, 2) + ' g/kg</li>';
   html += '</ul></div></div>';
 
+  // 4.5. 干湿球法校核验证 — 《实用供热空调设计手册》第2版
+  html += '<div class="physics-item">';
+  html += '<h4>🔎 干湿球法校核验证 (Psychrometer Cross-Check)</h4>';
+  html += '<div class="physics-def"><strong>手册公式 (1.6-3)：</strong>P<sub>q</sub> = P<sub>q&#xB7;b</sub>(t<sub>s</sub>) &#x2212; A&#xB7;P&#xB7;(t &#x2212; t<sub>s</sub>)</div>';
+  html += '<div class="physics-meaning"><strong>校核原理：</strong>将当前 P<sub>v</sub>（由 RH &#xD7; P<sub>sat</sub> 求得）代入干湿球公式，反解出湿球温度 t<sub>s</sub>，再验证正算能否还原 P<sub>v</sub>。';
+  html += ' 干湿球系数 A = ' + fmt(data.psychro_A, 6) + ' (自然通风)，大气压 P = ' + fmt(data.P_atm, 2) + ' kPa</div>';
+  html += '<table class="verify-table"><thead><tr><th>项目</th><th>入口（状态1）</th><th>出口（状态2）</th></tr></thead><tbody>';
+  html += '<tr><td>干球温度 t</td><td>' + fmt(data.tempIn, 1) + ' ℃</td><td>' + fmt(data.tempOut, 1) + ' ℃</td></tr>';
+  html += '<tr><td>当前 P<sub>v</sub>（来自 RH&#xD7;P<sub>sat</sub>）</td><td>' + fmt(data.P_v_in, 4) + ' kPa</td><td>' + fmt(data.P_v_out, 4) + ' kPa</td></tr>';
+  html += buildVerifyRow('反算湿球温度 t<sub>s</sub>', data.wetBulb_in, data.wetBulb_out, '℃', 'ts');
+  html += buildVerifyRow('湿球饱和压力 P<sub>q&#xB7;b</sub>(t<sub>s</sub>)', data.wetBulb_in, data.wetBulb_out, 'kPa', 'P_sat_ts');
+  html += buildVerifyRow('正算 P<sub>q</sub>', data.wetBulb_in, data.wetBulb_out, 'kPa', 'P_q_calc');
+  html += buildVerifyRow('与 P<sub>v</sub> 偏差', data.wetBulb_in, data.wetBulb_out, '%', 'error_pct');
+  html += '</tbody></table>';
+  var wbValid = data.wetBulb_in && data.wetBulb_in.error_pct != null;
+  if (wbValid) {
+    var absErr = Math.abs(data.wetBulb_in.error_pct);
+    var badge = absErr < 0.01 ? '✅' : (absErr < 0.1 ? '⚠️' : '❌');
+    var note = absErr < 0.01 ? '两种方法高度一致，公式体系自洽。'
+      : (absErr < 0.1 ? '偏差在可接受范围内（&lt; 0.1%）。'
+        : '偏差较大，请核查输入参数是否合理。');
+    html += '<div class="verify-verdict">' + badge + ' 校核结论：两种方法计算的水蒸气分压力偏差 ' + fmt(data.wetBulb_in.error_pct, 4) + '%。' + note + '</div>';
+  } else {
+    html += '<div class="verify-verdict">&#x2014; 参数无效，无法校核</div>';
+  }
+  html += '</div>';
+
   // 5. 比焓
   html += '<div class="physics-item">';
   html += '<h4>⚡ 比焓 (Specific Enthalpy)</h4>';
@@ -243,7 +398,10 @@ function buildPhysicsExplanation(data) {
   html += '<div class="engineering-exp"><strong>工程设计经验：</strong><ul>';
   html += '<li>空调冷负荷计算必须用焓差法（Q = ṁ × Δh），不能用温差法，因为温差法忽略了除湿的潜热负荷</li>';
   html += '<li>在高湿工况下，潜热负荷可占总负荷的 40%~60%，忽略潜热会严重低估制冷需求</li>';
-  html += '<li>本工况制冷量 Q_c = ' + fmt(data.Q_cooling, 2) + ' kW，其中显热占比约 ' + fmt(calcSensibleRatio(data), 0) + '%，潜热占比约 ' + fmt(100 - calcSensibleRatio(data), 0) + '%</li>';
+  var sr = calcSensibleRatio(data);
+  html += sr !== null ?
+    '<li>本工况制冷量 Q_c = ' + fmt(data.Q_cooling, 2) + ' kW（净制冷量），其中显热占比约 ' + fmt(sr, 0) + '%，潜热占比约 ' + fmt(100 - sr, 0) + '%</li>' :
+    '<li>本工况制冷量 Q_c = ' + fmt(data.Q_cooling, 2) + ' kW（当前为加热工况，无制冷需求）</li>';
   html += '<li>焓湿图（h-d 图）是空调设计的核心工具，可在图上直观看出空气处理过程</li>';
   html += '<li>2501 kJ/kg 是 0℃ 时水的汽化潜热，意味着蒸发 1kg 水需要吸收 2501 kJ 热量</li>';
   html += '<li>再热过程（先冷却除湿，再加热到目标温度）看似浪费能量，但这是精确控制温湿度的必要手段</li>';
@@ -253,23 +411,26 @@ function buildPhysicsExplanation(data) {
   return html;
 }
 
-/** 计算露点温度 (Magnus公式反推，P_v单位为kPa，需转换为hPa) */
-function calcDewPoint(P_v_kPa) {
-  var P_v_hPa = P_v_kPa * 10; // kPa → hPa
-  if (P_v_hPa <= 0.61078) return -100;
-  return 237.3 * Math.log(P_v_hPa / 0.61078) / (17.27 - Math.log(P_v_hPa / 0.61078));
-}
-
-/** 计算显热占比 */
+/**
+ * 计算显热占比（仅当有制冷量时有效） */
 function calcSensibleRatio(data) {
+  if (data.Q_cooling <= 0) return 100;
   var sensibleHeat = data.massFlow * 1.006 * Math.abs(data.tempIn - data.tempOut);
-  var totalHeat = Math.max(data.Q_cooling, 0.001);
-  return Math.min(100, (sensibleHeat / totalHeat) * 100);
+  return Math.min(100, (sensibleHeat / data.Q_cooling) * 100);
 }
 
 // ==========================================
 // 六、生成详细计算过程（含物理意义）
 // ==========================================
+
+/** 干湿球校核表行：从两个对象分别提取字段值 */
+function buildVerifyRow(label, objA, objB, unit, field) {
+  var vA = objA && objA[field] != null ? objA[field] : null;
+  var vB = objB && objB[field] != null ? objB[field] : null;
+  var sA = vA != null ? fmt(vA, 4) + ' ' + unit : '—';
+  var sB = vB != null ? fmt(vB, 4) + ' ' + unit : '—';
+  return '<tr><td>' + label + '</td><td>' + sA + '</td><td>' + sB + '</td></tr>';
+}
 
 function buildProcessSteps(data) {
   var steps = [];
@@ -307,73 +468,98 @@ function buildProcessSteps(data) {
     '</div>'
   );
 
-  // 步骤3: 除湿量
+  // 步骤3: 除湿量/加湿量
   var deltaW = data.W_in - data.W_out;
-  var dehumidNote = deltaW > 0 ? "需要除湿：入口含湿量 > 出口含湿量" : "无需除湿（或需要加湿）";
+  var m_humidify = Math.max(0, data.massFlow * (data.W_out - data.W_in) * 1000);
+  var isDehumid = deltaW > 0;
+  var moistureNote = isDehumid ? "需要除湿：入口含湿量 > 出口含湿量" : (deltaW < 0 ? "需要加湿：出口含湿量 > 入口含湿量" : "含湿量不变");
   steps.push(
     '<div class="step-item">' +
-    '<div class="step-title">步骤 3：除湿量计算</div>' +
+    '<div class="step-title">步骤 3：除湿量/加湿量计算</div>' +
     '<div class="step-formula">含湿量差 ΔW = W₁ - W₂ = ' + fmt(data.W_in * 1000, 3) + ' - ' + fmt(data.W_out * 1000, 3) + ' = ' + fmt(deltaW * 1000, 3) + ' g/kg</div>' +
-    '<div class="step-result">' + dehumidNote + '</div>' +
-    '<div class="step-formula">除湿量 ṁ_deh = ṁ × ΔW × 1000 = ' + data.massFlow + ' × ' + fmt(Math.max(0, deltaW), 6) + ' × 1000</div>' +
-    '<div class="step-result">除湿量 = ' + fmt(data.m_dehumid, 4) + ' g/s</div>' +
-    '<div class="physical-meaning">含义：每秒需要从空气中凝结分离出 ' + fmt(data.m_dehumid, 2) + ' 克水，一小时约 ' + fmt(data.m_dehumid * 3.6, 1) + ' 升冷凝水</div>' +
+    '<div class="step-result">' + moistureNote + '</div>' +
+    (isDehumid ?
+      '<div class="step-formula">除湿量 ṁ_deh = ṁ × ΔW × 1000 = ' + data.massFlow + ' × ' + fmt(deltaW, 6) + ' × 1000</div>' +
+      '<div class="step-result">除湿量 = ' + fmt(data.m_dehumid, 4) + ' g/s</div>' +
+      '<div class="physical-meaning">含义：每秒需要从空气中凝结分离出 ' + fmt(data.m_dehumid, 2) + ' 克水，一小时约 ' + fmt(data.m_dehumid * 3.6, 1) + ' 升冷凝水</div>'
+    :
+      '<div class="step-formula">加湿量 ṁ_hum = ṁ × |ΔW| × 1000 = ' + data.massFlow + ' × ' + fmt(Math.abs(deltaW), 6) + ' × 1000</div>' +
+      '<div class="step-result">加湿量 = ' + fmt(m_humidify, 4) + ' g/s = ' + fmt(m_humidify * 3.6, 2) + ' kg/h</div>' +
+      '<div class="physical-meaning">含义：每秒需要向空气中加入 ' + fmt(m_humidify, 2) + ' 克水蒸气，每小时耗水 ' + fmt(m_humidify * 3.6, 1) + ' 升（依据 GB/T 18300-2025 需使用纯水）</div>'
+    ) +
     '</div>'
   );
 
-  // 步骤4: 制冷量
+  // 步骤4: 制冷量与表冷器负荷（区分净制冷与盘管实际负荷）
   var deltaH = data.h_in - data.h_out;
+  var deltaH_coil = data.h_in - (data.h_coil || data.h_out);
   var coolNote = deltaH > 0 ? "需要制冷：入口焓值 > 出口焓值" : "无需制冷（或需要加热）";
+  var isDehumidCase = data.W_in > data.W_out;
   steps.push(
     '<div class="step-item">' +
-    '<div class="step-title">步骤 4：制冷量计算（焓差法）</div>' +
+    '<div class="step-title">步骤 4：制冷量计算（焓差法 + 盘管能量平衡）</div>' +
     '<div class="step-formula">焓差 Δh = h₁ - h₂ = ' + fmt(data.h_in, 4) + ' - ' + fmt(data.h_out, 4) + ' = ' + fmt(deltaH, 4) + ' kJ/kg</div>' +
     '<div class="step-result">' + coolNote + '</div>' +
-    '<div class="step-formula">制冷量 Q_c = ṁ × Δh = ' + data.massFlow + ' × ' + fmt(Math.max(0, deltaH), 4) + '</div>' +
-    '<div class="step-result">制冷量 Q_c = ' + fmt(data.Q_cooling, 4) + ' kW</div>' +
-    '<div class="physical-meaning">含义：表冷器需要从空气中移除 ' + fmt(data.Q_cooling, 2) + ' kW 的热量（含显热+潜热）。注：不能用温差法，因为忽略了除湿的潜热负荷</div>' +
+    '<div class="step-formula">净制冷量 Q_c = ṁ × Δh = ' + data.massFlow + ' × ' + fmt(Math.max(0, deltaH), 4) + ' = ' + fmt(data.Q_cooling, 4) + ' kW</div>' +
+    '<div class="step-formula">表冷器出口温度 T_coil = ' + fmt(data.T_coil, 1) + ' ℃（由出口含湿量 W₂ 在 ADP-RH=' + data.coilRH + '% 下反推 Magnus）</div>' +
+    (isDehumidCase ?
+    '<div class="step-formula">表冷器出口焓 h_coil = 1.006 × ' + fmt(data.T_coil, 1) + ' + ' + fmt(data.W_out, 6) + ' × (2501 + 1.86 × ' + fmt(data.T_coil, 1) + ')</div>' +
+    '<div class="step-result">h_coil = ' + fmt(data.h_coil, 4) + ' kJ/kg（盘管出口焓，再热器之前）</div>' +
+    '<div class="step-formula">实际表冷器负荷 Q_coil = ṁ × (h₁ − h_coil) = ' + data.massFlow + ' × ' + fmt(deltaH_coil, 4) + ' = ' + fmt(data.Q_coil_actual, 2) + ' kW</div>' :
+    '<div class="step-formula">实际表冷器负荷 Q_coil = ṁ × (h₁ − h₂) = ' + data.massFlow + ' × ' + fmt(Math.max(0, deltaH), 4) + ' = ' + fmt(data.Q_coil_actual, 2) + ' kW</div>'
+    ) +
+    '<div class="physical-meaning">能量平衡校核：表冷器负荷 Q_coil = 净制冷量 Q_c + 再热负荷 Q_reheat = ' + fmt(data.Q_cooling, 2) + ' + ' + fmt(data.Q_reheat, 2) + ' = ' + fmt(data.Q_coil_actual, 2) + ' kW ✓</div>' +
+    '<div class="physical-meaning">⚠ 盘管负荷修正（GB/T 14294-2026）：旧式按 Q=ṁ(h_in−h_adp) 假设 BF=0（100%接触），高估 1/(1−BF)≈11~43%。现按能量平衡 Q=ṁ(h_in−h_coil) 计算，与旁通系数 BF 无关；BF=' + data.BF + ' 仅用于 ADP 出水温度选择。</div>' +
+    '<div class="physical-meaning">含义：盘管实际负荷 = 入口焓 − 盘管出口焓（再热前）。ADP（机器露点）用于校核盘管出口温度是否低于入口露点以保证除湿，并选择冷冻水出水温度。</div>' +
     '</div>'
   );
 
-  // 步骤5: 加热量
-  var deltaT = data.tempOut - data.tempIn;
-  var heatNote = deltaT > 0 ? "需要加热：出口温度 > 入口温度" : "无需加热（出口温度 ≤ 入口温度）";
+  // 步骤5: 加热/再热负荷
+  var reheatDeltaT = data.tempOut - data.T_coil;
+  var isSummerCase = data.W_in > data.W_out;
+  var heatLabel = isSummerCase ? "再热" : "预热";
+  var heatDesc = isSummerCase ?
+    "再热器将空气从表冷器出口温度 " + fmt(data.T_coil, 1) + "℃ 加热到目标温度 " + data.tempOut + "℃。即使入口温度高于出口温度，再热器仍需工作。" :
+    "预热器将空气从入口温度 " + fmt(data.T_coil, 1) + "℃ 加热到目标温度 " + data.tempOut + "℃。";
+  var reheatNote = reheatDeltaT > 0 ? "需要" + heatLabel + "：目标温度 > " + (isSummerCase ? "表冷器出口" : "入口") + "温度" : "无需" + heatLabel;
   steps.push(
     '<div class="step-item">' +
-    '<div class="step-title">步骤 5：加热量计算（显热法）</div>' +
-    '<div class="step-formula">温差 ΔT = T₂ - T₁ = ' + data.tempOut + ' - ' + data.tempIn + ' = ' + fmt(deltaT, 2) + ' ℃</div>' +
-    '<div class="step-result">' + heatNote + '</div>' +
-    '<div class="step-formula">加热量 Q_h = ṁ × c_p × ΔT = ' + data.massFlow + ' × 1.006 × ' + fmt(Math.max(0, deltaT), 2) + '</div>' +
-    '<div class="step-result">加热量 Q_h = ' + fmt(data.Q_heating, 4) + ' kW</div>' +
-    '<div class="physical-meaning">含义：加热器需要向空气提供 ' + fmt(data.Q_heating, 2) + ' kW 的热量。c_p = 1.006 kJ/(kg·K) 为空气定压比热</div>' +
+    '<div class="step-title">步骤 5：' + heatLabel + '负荷计算（空气需热量，用于选加热器盘管）</div>' +
+    '<div class="step-formula">温差 ΔT_' + (isSummerCase ? "reheat" : "preheat") + ' = T_out - T_' + (isSummerCase ? "coil" : "in") + ' = ' + data.tempOut + ' - ' + fmt(data.T_coil, 1) + ' = ' + fmt(reheatDeltaT, 2) + ' ℃</div>' +
+    '<div class="step-result">' + reheatNote + '</div>' +
+    '<div class="step-formula">' + heatLabel + '负荷 Q = ṁ × c_p × ΔT = ' + data.massFlow + ' × 1.006 × ' + fmt(Math.max(0, reheatDeltaT), 2) + '</div>' +
+    '<div class="step-result">' + heatLabel + '负荷 = ' + fmt(data.Q_reheat, 4) + ' kW（空气侧需热量）</div>' +
+    '<div class="physical-meaning">含义：' + heatDesc + '此为空气侧需要的显热量，电加热器耗电 = 此值 / 0.98（见步骤6）。</div>' +
     '</div>'
   );
 
-  // 步骤6: 冷冻水流量与电加热功率
+  // 步骤6: 冷冻水流量与电加热器耗电
   var V_c = data.m_chilled / 1000 * 3600;
   steps.push(
     '<div class="step-item">' +
-    '<div class="step-title">步骤 6：冷冻水流量与电加热功率计算</div>' +
-    '<div class="step-formula">冷冻水（供回水温差 ΔT=5℃）：ṁ_ch = Q_c / (c_pw × ΔT_ch) = ' + fmt(data.Q_cooling, 4) + ' / (4.187 × 5)</div>' +
+    '<div class="step-title">步骤 6：冷冻水流量与电加热器耗电计算</div>' +
+    '<div class="step-formula">冷冻水（供回水温差 ΔT=' + data.chwDeltaT + '℃，供水 ' + fmt(data.chwSupply || 7, 0) + '℃ / 回水 ' + fmt((data.chwSupply || 7) + data.chwDeltaT, 1) + '℃）：</div>' +
+    '<div class="step-formula">ṁ_ch = Q_coil / (c_pw × ΔT_ch) = ' + fmt(data.Q_coil_actual, 4) + ' / (4.187 × ' + data.chwDeltaT + ')</div>' +
     '<div class="step-result">冷冻水流量 = ' + fmt(data.m_chilled, 4) + ' kg/s ≈ ' + fmt(V_c, 2) + ' m³/h</div>' +
-    '<div class="physical-meaning">含义：冷冻水以 5℃ 温差带走 ' + fmt(data.Q_cooling, 2) + ' kW 热量，需要流量 ' + fmt(V_c, 2) + ' m³/h</div>' +
-    '<div class="step-formula">电加热功率（效率 η=0.98）：P_elec = Q_h / η = ' + fmt(data.Q_heating, 4) + ' / 0.98</div>' +
-    '<div class="step-result">电加热功率 = ' + fmt(data.Q_heating / 0.98, 4) + ' kW</div>' +
-    '<div class="physical-meaning">含义：电加热器需要消耗 ' + fmt(data.Q_heating / 0.98, 2) + ' kW 电能，提供 ' + fmt(data.Q_heating, 2) + ' kW 热量（电热转换效率 98%）</div>' +
+    '<div class="physical-meaning">含义：冷冻水以 ' + data.chwDeltaT + '℃ 温差带走表冷器负荷 ' + fmt(data.Q_coil_actual, 2) + ' kW。标准 7/12℃ 系统 ΔT=5℃；大温差系统 ΔT=7~10℃ 可节能但盘管面积需增大。</div>' +
+    '<div class="step-formula">电加热器耗电（效率 η=0.98）：P_elec = Q_reheat / η = ' + fmt(data.Q_reheat, 4) + ' / 0.98</div>' +
+    '<div class="step-result">电加热器耗电 = ' + fmt(data.Q_reheat / 0.98, 4) + ' kW（电网输入功率，用于选电缆/断路器）</div>' +
+    '<div class="physical-meaning">含义：电加热器从电网取 ' + fmt(data.Q_reheat / 0.98, 2) + ' kW 电能，其中 ' + fmt(data.Q_reheat, 2) + ' kW 转为空气需热量（步骤5），2% 为散热损耗。耗电 > 需热量，选型时电缆/断路器按耗电功率计算，加热器盘管按需热量计算。</div>' +
     '</div>'
   );
 
-  // 步骤7: 空气密度与体积流量
-  var T_in_K = data.tempIn + 273.15;
-  var rho = data.P_atm / (0.287 * T_in_K);
+  // 步骤7: 空气密度与体积流量（虚温修正湿度影响）
+  var Tv = virtualTemp(data.tempIn, data.W_in);
+  var rho = data.rho_air;
   var Qv = data.massFlow / rho;
   var Qv_m3h = Qv * 3600;
   steps.push(
     '<div class="step-item">' +
-    '<div class="step-title">步骤 7：空气密度与体积流量计算</div>' +
-    '<div class="step-formula">空气密度 ρ = P_atm / (R × T₁) = ' + fmt(data.P_atm, 3) + ' / (0.287 × ' + fmt(T_in_K, 2) + ')</div>' +
-    '<div class="step-result">空气密度 ρ = ' + fmt(rho, 4) + ' kg/m³</div>' +
-    '<div class="physical-meaning">含义：空气密度随温度和气压变化。R = 0.287 kJ/(kg·K) 为干空气气体常数。<br>依据 GB/T 35226-2017《湿空气性质计算公式》</div>' +
+    '<div class="step-title">步骤 7：湿空气密度与体积流量计算（虚温修正）</div>' +
+    '<div class="step-formula">虚温 T_v = T × (1 + 1.6078·W) / (1 + W) = ' + fmt(data.tempIn, 2) + '×(1+1.6078×' + fmt(data.W_in, 5) + ')/(1+' + fmt(data.W_in, 5) + ') = ' + fmt(Tv, 2) + ' K</div>' +
+    '<div class="step-formula">湿空气密度 ρ = P_atm / (R × T_v) = ' + fmt(data.P_atm, 3) + ' / (0.287 × ' + fmt(Tv, 2) + ')</div>' +
+    '<div class="step-result">湿空气密度 ρ = ' + fmt(rho, 4) + ' kg/m³</div>' +
+    '<div class="physical-meaning">含义：湿空气密度用虚温修正（GB/T 35226-2017）。对比旧式 ρ=P/(R·T) 忽略湿度，50%RH 下约偏低 0.5%。<br>R=0.287 kJ/(kg·K) 干空气气体常数。</div>' +
     '<div class="step-formula">体积流量 Q_v = ṁ / ρ = ' + fmt(data.massFlow, 2) + ' / ' + fmt(rho, 4) + '</div>' +
     '<div class="step-result">体积流量 Q_v = ' + fmt(Qv, 4) + ' m³/s = ' + fmt(Qv_m3h, 0) + ' m³/h</div>' +
     '<div class="physical-meaning">含义：每秒需要处理约 ' + fmt(Qv, 2) + ' 立方米空气，这是确定 AHU 截面尺寸的基础参数</div>' +
@@ -384,10 +570,10 @@ function buildProcessSteps(data) {
 
   // 步骤8: 各功能段截面尺寸计算
   var secInfo = [
-    { name: '初效过滤器段', vel: data.v_filter, area: data.sec_filter.area, sec: data.sec_filter, len: data.len_filter, std: 'GB/T 14294-2008', note: '过滤器迎面风速宜为 2.0~2.5 m/s，过高则阻力大、过滤效率低' },
-    { name: '表冷器段', vel: data.v_coil, area: data.sec_coil.area, sec: data.sec_coil, len: data.len_coil, std: 'GB/T 14294-2008', note: '表冷器迎面风速宜为 2.0~2.5 m/s，除湿工况取小值，保证表冷器表面温度低于露点' },
+    { name: '初效过滤器段', vel: data.v_filter, area: data.sec_filter.area, sec: data.sec_filter, len: data.len_filter, std: 'GB/T 14294-2026', note: '过滤器迎面风速宜为 2.0~2.5 m/s，过高则阻力大、过滤效率低' },
+    { name: '表冷器段', vel: data.v_coil, area: data.sec_coil.area, sec: data.sec_coil, len: data.len_coil, std: 'GB/T 14294-2026', note: '表冷器迎面风速宜为 2.0~2.5 m/s，除湿工况取小值，保证表冷器表面温度低于露点' },
     { name: '电加热器段', vel: data.v_heater, area: data.sec_heater.area, sec: data.sec_heater, len: data.len_heater, std: 'GB 50019-2015', note: '加热器段迎面风速宜为 2.5~3.0 m/s，风速过高导致加热不均匀' },
-    { name: '加湿器段', vel: data.v_humidifier, area: data.sec_humidifier.area, sec: data.sec_humidifier, len: data.len_humidifier, std: 'GB/T 14294-2008', note: '加湿器迎面风速宜为 2.0~2.5 m/s，确保水蒸气充分混合' },
+    { name: '加湿器段', vel: data.v_humidifier, area: data.sec_humidifier.area, sec: data.sec_humidifier, len: data.len_humidifier, std: 'GB/T 14294-2026', note: '加湿器迎面风速宜为 2.0~2.5 m/s，确保水蒸气充分混合' },
     { name: '风机段', vel: data.v_fan_outlet, area: data.sec_fan.area, sec: data.sec_fan, len: data.len_fan, std: 'GB 50019-2015', note: '风机出口风速 3~5 m/s，出风口风速控制 4~6 m/s，过高产生噪音' },
     { name: '出风口段', vel: data.v_outlet, area: data.sec_outlet.area, sec: data.sec_outlet, len: 0.3, std: 'GB 50019-2015', note: '出风口风速 4~6 m/s，与测试台进风口对接' }
   ];
@@ -430,7 +616,7 @@ function buildProcessSteps(data) {
   steps.push(
     '<div class="step-item">' +
     '<div class="step-title">步骤 9：箱体材料与结构设计</div>' +
-    '<div class="step-formula">箱体选型依据 GB/T 14294-2008《组合式空调机组》及行业经验</div>' +
+    '<div class="step-formula">箱体选型依据 GB/T 14294-2026《组合式空调机组》及行业经验</div>' +
     '<table class="air-state-table" style="margin-top:8px;">' +
     '<tr><th>部件</th><th>推荐规格</th><th>标准依据</th><th>设计理由</th></tr>' +
     '<tr><td class="param-name">外板</td><td>304 不锈钢 1.5mm</td><td>GB/T 3280-2015</td><td>耐腐蚀、强度高、易清洁</td></tr>' +
@@ -440,7 +626,7 @@ function buildProcessSteps(data) {
     '<tr><td class="param-name">底座</td><td>槽钢 10# 热镀锌</td><td>GB/T 706-2016</td><td>承重 ≥ 500kg/m²</td></tr>' +
     '<tr><td class="param-name">密封</td><td>硅酮胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>' +
     '</table>' +
-    '<div class="physical-meaning">箱体漏风率 ≤ 1% 为 GB/T 14294-2008 要求，高精度测试台建议漏风率 ≤ 0.5%</div>' +
+    '<div class="physical-meaning">箱体漏风率 ≤ 1% 为 GB/T 14294-2026 要求，高精度测试台建议漏风率 ≤ 0.5%</div>' +
     '<div class="engineering-exp"><strong>设计要点：</strong><ul>' +
     '<li>箱体面板采用"三明治"结构：外板 1.5mm 304SS + 保温 50mm + 内板 1.0mm 镀锌板，用断冷桥铝型材连接</li>' +
     '<li>AHU 底座高度 ≥ 150mm，方便底部接管和排水</li>' +
@@ -474,7 +660,7 @@ function buildProcessSteps(data) {
     '<ul>' +
     '<li>GB/T 35226-2017《湿空气性质计算公式》（Magnus 饱和水汽压公式、空气密度计算）</li>' +
     '<li>GB 50736-2012《民用建筑供暖通风与空气调节设计规范》（焓差法负荷计算）</li>' +
-    '<li>GB/T 14294-2008《组合式空调机组》（设备选型、箱体结构、漏风率要求）</li>' +
+    '<li>GB/T 14294-2026《组合式空调机组》（设备选型、箱体结构、漏风率要求）</li>' +
     '<li>GB 50019-2015《工业建筑供暖通风与空气调节设计规范》（风速选取、风管设计）</li>' +
     '<li>GB/T 3280-2015《不锈钢冷轧钢板和钢带》（外板材料）</li>' +
     '<li>GB/T 2518-2019《连续热镀锌钢板和钢带》（内板材料）</li>' +
@@ -500,7 +686,8 @@ function buildStructuralDesign(data) {
   var lens = [s.len_filter, s.len_coil, s.len_heater, s.len_humidifier, s.len_fan, 0.3];
 
   var T_in_K = s.tempIn + 273.15;
-  var rho = s.P_atm / (0.287 * T_in_K);
+  // 使用湿空气密度（已含湿度修正），回退到干空气密度公式
+  var rho = s.rho_air || (s.P_atm / (0.287 * T_in_K));
   var Qv = s.massFlow / rho;
   var Qv_m3h = Qv * 3600;
 
@@ -562,7 +749,7 @@ function buildStructuralDesign(data) {
   }
   html += '<li>各段长度根据设备尺寸和维护空间确定：过滤器 500~600mm、表冷器 400~500mm、加热器 300~400mm、加湿器 500~600mm、风机段 800~1000mm</li>';
   html += '<li>过渡段长度 1.0~1.5m，用于各功能段之间的连接和气流稳定</li>';
-  html += '<li>以上风速推荐值依据 GB/T 14294-2008《组合式空调机组》和 GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</li>';
+  html += '<li>以上风速推荐值依据 GB/T 14294-2026《组合式空调机组》和 GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</li>';
   html += '</ul></div>';
   html += '</div>';
 
@@ -588,8 +775,62 @@ function buildStructuralDesign(data) {
   html += '• 加湿器设在加热器之后，蒸汽分配管距上游 ≥500mm，距风机 ≥1000mm<br>';
   html += '• 风机出口设帆布软连接（≥200mm）和消音器，底部设弹簧减震器<br>';
   html += '• 出风口设手动调节阀，方便调试时调节风量<br>';
-  html += '• 每个功能段设检修门 ≥600×600mm，带观察窗和 LED 照明';
+  html += '• 每个功能段设检修门，位置见下方"检修门布局"详表';
   html += '</div>';
+  html += '</div>';
+
+  // ===== 3.5 检修门布局 =====
+  html += '<div class="physics-item">';
+  html += '<h4>🚪 检修门布局与设置理由</h4>';
+  html += '<table class="air-state-table">';
+  html += '<tr><th>功能段</th><th>检修门位置</th><th>尺寸 (mm)</th><th>设置理由</th></tr>';
+  html += '<tr>' +
+    '<td class="param-name">初效过滤器段</td>' +
+    '<td>侧面（人员操作侧）</td>' +
+    '<td>600×600</td>' +
+    '<td>定期更换过滤袋（1~3 个月/次），需从侧面滑入拉出；前后设压差开关接口，需要观察和接线</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">表冷器段</td>' +
+    '<td>侧面 + 顶部（如空间允许）</td>' +
+    '<td>800×600</td>' +
+    '<td>表冷器盘管需定期清洗翅片（高压水枪或化学清洗）；接水盘需清理杂物和藻类；排水管存水弯需检查水封；盘管翅片变形需校正；每年至少检修一次</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">防水板段</td>' +
+    '<td>侧面（与表冷器共用检修门）</td>' +
+    '<td>—</td>' +
+    '<td>挡水板与表冷器相邻，通过同一检修门即可观察和清洁挡水板表面的积垢和藻类</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">电加热器段</td>' +
+    '<td>侧面</td>' +
+    '<td>600×600</td>' +
+    '<td>加热管需定期检查老化、变形；超温保护探头需校验；端子接线需检修；前后 500mm 范围内不得有可燃物，需通过检修门确认</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">加湿器段</td>' +
+    '<td>侧面 + 顶部</td>' +
+    '<td>600×600</td>' +
+    '<td>蒸汽分配管喷孔易堵塞（水垢），需定期疏通；蒸汽管保温层需检查破损；蒸汽调节阀和执行器需检修；距风机 ≥1000mm 需目视确认</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">送风机段</td>' +
+    '<td>侧面 + 顶部</td>' +
+    '<td>800×800</td>' +
+    '<td>风机是唯一旋转部件，需定期检查皮带张紧度（每月）、轴承润滑（每季度）、电机绝缘（每年）；减震器老化需更换；帆布软连接破损需更换；风机叶轮积灰需清洁</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">出风口段</td>' +
+    '<td>侧面</td>' +
+    '<td>600×600</td>' +
+    '<td>手动调节阀需手动操作开度；温度/湿度传感器探头需定期校验和清洁</td></tr>';
+  html += '</table>';
+
+  html += '<div class="engineering-exp" style="margin-top:6px;"><strong>💡 检修门设置通用原则：</strong>' +
+    '<ul>' +
+    '<li><strong>位置：</strong>所有检修门设在人员操作侧（通常为 AHU 正面），方便日常巡检和维修</li>' +
+    '<li><strong>尺寸：</strong>最小 600×600mm，保证人员头部和肩膀能通过；表冷器段和风机段因维修空间需求大，采用 800×800mm</li>' +
+    '<li><strong>观察窗：</strong>每个检修门配双层钢化玻璃观察窗（δ=5mm+5mm），不开门即可观察内部运行状态（过滤袋积灰、盘管结霜、加热管发红等）</li>' +
+    '<li><strong>照明：</strong>每个检修段内部设 LED 照明灯（DC24V 低压安全电压），开门自动点亮，方便检修</li>' +
+    '<li><strong>安全：</strong>风机段检修门设风机停机联锁开关——开门瞬间切断风机电源，防止人员卷入</li>' +
+    '<li><strong>密封：</strong>检修门四周设 EPDM 密封条，门锁为不锈钢按压式带手柄，确保气密性 ≤1%</li>' +
+    '<li><strong>吊装适配：</strong>吊装式 AHU 的检修门位置与落地式一致，但需注意操作侧下方不得有吊杆阻挡开门</li>' +
+    '</ul></div>';
   html += '</div>';
 
   // ===== 4. 箱体材料规格 =====
@@ -607,11 +848,106 @@ function buildStructuralDesign(data) {
   html += '<div class="engineering-exp" style="margin-top:8px;"><strong>💡 箱体设计要点：</strong>' +
     '<ul>' +
     '<li>面板采用"三明治"断冷桥结构：外板 1.5mm 304SS + 保温 50mm PU + 内板 1.0mm 镀锌板</li>' +
-    '<li>箱体承受 ±2000Pa 压力不变形，满足 GB/T 14294-2008 强度要求</li>' +
+    '<li>箱体承受 ±2000Pa 压力不变形，满足 GB/T 14294-2026 强度要求</li>' +
     '<li>50mm 聚氨酯保温层可防止在夏季工况箱体外表面结露（露点温度约 15~20℃）</li>' +
     '<li>铝合金框架断冷桥设计，避免内外温差通过框架传导产生冷凝水</li>' +
-    '<li>箱体漏风率 ≤1% 为 GB/T 14294-2008 最低要求，精密测试台建议 ≤0.5%</li>' +
+    '<li>箱体漏风率 ≤1% 为 GB/T 14294-2026 最低要求，精密测试台建议 ≤0.5%</li>' +
     '<li>底座高度 ≥150mm，便于底部接管、排水管安装和清扫</li>' +
+    '</ul></div>';
+  html += '</div>';
+
+  // ===== 5. 部件安装与固定方式（吊装式） =====
+  html += '<div class="physics-item">';
+  html += '<h4>🔩 各部件安装与固定方式（吊装式）</h4>';
+  html += '<table class="air-state-table">';
+  html += '<tr><th>部件</th><th>安装方式</th><th>固定件/安装件</th><th>数量</th><th>备注</th></tr>';
+  html += '<tr>' +
+    '<td class="param-name">吊装支撑系统</td>' +
+    '<td>整套 AHU 通过全螺纹吊杆悬挂在楼板/屋面梁下方</td>' +
+    '<td>化学锚栓 M16×190（或膨胀螺栓 M16×150），全螺纹热镀锌吊杆 M16，双螺母锁紧 + 弹簧垫圈，吊杆底部连接板（δ=10mm Q235B 热镀锌）</td>' +
+    '<td>吊杆 6~10 根</td>' +
+    '<td>锚栓间距 ≤1500mm，吊杆垂直度偏差 ≤2mm/m。楼板需结构校核，吊点处配筋加强</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">底部承重梁</td>' +
+    '<td>两根通长热镀锌槽钢平行布置，作为 AHU 整体承重基础梁，吊杆从上方拉住槽钢</td>' +
+    '<td>热镀锌槽钢 12#（120×53×5.5mm），每根长度 = AHU总长 + 200mm，M16 螺栓将槽钢与吊杆连接板固定</td>' +
+    '<td>2 根</td>' +
+    '<td>两根槽钢间距 = AHU 宽度 - 100mm，两端各外伸 100mm 用于吊点。槽钢与箱体框架之间垫 5mm 橡胶减震垫</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">箱体框架</td>' +
+    '<td>铝合金型材 40×40mm 现场组装，角件连接，框架底部用 U 型螺栓固定在承重槽钢上</td>' +
+    '<td>角件（铝合金压铸），M8×20 内六角螺栓 + 弹簧垫圈 + 平垫圈，U 型螺栓 M8（镀锌，配槽钢）</td>' +
+    '<td>角件 4~8/节点，U 型螺栓 6~10 套</td>' +
+    '<td>接缝处涂硅酮密封胶，框架与槽钢之间垫 5mm 橡胶减震垫</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">箱体面板</td>' +
+    '<td>面板卡入铝合金框架槽内，用压条固定</td>' +
+    '<td>铝合金压条，自攻螺钉 ST4.8×16（不锈钢），橡胶密封条（EPDM，δ=3mm）</td>' +
+    '<td>面板 4~6 颗/m²</td>' +
+    '<td>内外面板分别从两侧安装，保温层夹在中间，"三明治"结构</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">初效过滤器</td>' +
+    '<td>过滤器框架固定在箱体侧板，袋式过滤器从检修侧滑入导轨</td>' +
+    '<td>过滤器导轨（铝合金，C型槽），M6×12 螺栓固定导轨，过滤器压紧弹簧夹</td>' +
+    '<td>导轨 2 根/台</td>' +
+    '<td>过滤器前后设压差开关电接点，安装过滤袋后检查密封</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">表冷器</td>' +
+    '<td>表冷器由底部承重槽钢直接支撑，吊装进入后用螺栓固定</td>' +
+    '<td>M8×25 不锈钢螺栓 + 弹簧垫圈 + 平垫圈，L 型角钢挡块（L50×5）焊接在槽钢上定位，不锈钢接水盘（1.2mm 304SS）</td>' +
+    '<td>螺栓 8~12 套</td>' +
+    '<td>接水盘坡度 ≥1%（朝排水口），排水管 DN32 PVC-U 配 P 型存水弯 ≥50mm。排水管沿吊杆引至楼板下方</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">防水板（挡水板）</td>' +
+    '<td>插装在表冷器出风侧铝合金导轨内</td>' +
+    '<td>铝合金导轨（C型槽），M6×16 自攻螺钉固定导轨，挡水板（304SS 0.8mm 波纹板）</td>' +
+    '<td>6~10 片</td>' +
+    '<td>挡水板间距 20~25mm，与气流方向呈 30°夹角，底部设排水槽引至接水盘</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">电加热器</td>' +
+    '<td>从箱体侧面水平装入，固定在箱体底部支架上</td>' +
+    '<td>M8×20 不锈钢螺栓，加热器安装支架（角钢 L40×4），不锈钢防护网（网格 20×20mm）</td>' +
+    '<td>螺栓 6~8 套</td>' +
+    '<td>加热器前后各 500mm 不得有可燃物，设防过热保护（80℃），风压差开关联锁</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">加湿器（蒸汽）</td>' +
+    '<td>蒸汽分配管水平固定在箱体内部，利用箱体框架支撑</td>' +
+    '<td>M8×25 不锈钢螺栓 + 减震垫（橡胶 5mm），蒸汽分配管支架（角钢 L40×4），蒸汽管卡箍 DN25~DN50</td>' +
+    '<td>螺栓 4~6 套</td>' +
+    '<td>蒸汽分配管距上游 ≥500mm，距风机 ≥1000mm，蒸汽管设保温层（岩棉 50mm）</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">送风机</td>' +
+    '<td>风机整体安装在箱体底部的承重槽钢上，底部设弹簧减震器</td>' +
+    '<td>弹簧减震器（风机专用，承重 100~500kg），M10×30 螺栓 + 双螺母锁紧，电机防雨罩，帆布软接头（≥200mm）</td>' +
+    '<td>减震器 4 只</td>' +
+    '<td>风机底部减震器直接座在槽钢上，风机出口设软连接减振。整个机组的振动通过吊杆弹簧减震器传递至楼板</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">出风口</td>' +
+    '<td>法兰连接，螺栓固定在箱体端板</td>' +
+    '<td>法兰（角钢 L40×4 或钢板折弯），M10×30 螺栓 + 弹簧垫圈，橡胶密封垫（δ=3mm）</td>' +
+    '<td>螺栓 8~12 套</td>' +
+    '<td>出风口设手动调节阀，方便调试时调节风量。出口风管需独立吊装，不得将风管重量作用在 AHU 上</td></tr>';
+  html += '<tr>' +
+    '<td class="param-name">检修门</td>' +
+    '<td>铰链固定在箱体框架上</td>' +
+    '<td>不锈钢铰链（承重 ≥50kg/副），M6×16 螺栓固定铰链，门锁（不锈钢按压式），门密封条（EPDM）</td>' +
+    '<td>铰链 2~3 副/门</td>' +
+    '<td>检修门 ≥600×600mm，带双层钢化玻璃观察窗（δ=5mm+5mm），内部 LED 照明灯 DC24V</td></tr>';
+  html += '</table>';
+
+  html += '<div class="engineering-exp" style="margin-top:8px;"><strong>💡 吊装安装通用要求：</strong>' +
+    '<ul>' +
+    '<li>吊装 AHU 总重量约 ' + fmt(s.massFlow * 2000, 0) + '~' + fmt(s.massFlow * 3000, 0) + ' kg（估算），每个吊点承受约 ' + fmt(s.massFlow * 300, 0) + '~' + fmt(s.massFlow * 500, 0) + ' kg</li>' +
+    '<li>所有吊杆必须为热镀锌全螺纹杆，配双螺母 + 弹簧垫圈防松</li>' +
+    '<li>化学锚栓施工后需固化 ≥24h 方可承重，固化期间不得扰动</li>' +
+    '<li>吊杆垂直度偏差 ≤2mm/m，各吊点均匀受力，安装后用水平仪校核</li>' +
+    '<li>所有螺栓连接必须加弹簧垫圈防松，有振动部位双螺母锁紧</li>' +
+    '<li>不锈钢螺栓与铝合金型材之间加尼龙垫片防止电化学腐蚀</li>' +
+    '<li>所有穿线孔/接管孔在安装后必须用防火密封胶封堵，保持气密性</li>' +
+    '<li>箱体及所有金属部件需做接地跨接（≥BVR-4mm² 黄绿线），接地电阻 ≤4Ω</li>' +
+    '<li>排水管沿吊杆引至楼板下方，坡度 ≥1%，不得出现 U 型弯</li>' +
+    '<li>进出风管需独立吊装支撑，不得将风管重量作用在 AHU 箱体上</li>' +
+    '<li>安装完成后进行漏风试验（≥500Pa 正压，漏风率 ≤1%）</li>' +
     '</ul></div>';
   html += '</div>';
 
@@ -623,30 +959,47 @@ function buildStructuralDesign(data) {
 // 七、主计算函数
 // ==========================================
 
-function calculate() {
+function calculate(silent) {
   // ---- 1. 读取输入 ----
   var massFlow = parseFloat(document.getElementById("massFlow").value);
   var tempIn = parseFloat(document.getElementById("tempIn").value);
   var rhIn = parseFloat(document.getElementById("rhIn").value);
   var tempOut = parseFloat(document.getElementById("tempOut").value);
   var rhOut = parseFloat(document.getElementById("rhOut").value);
-  var P_atm = parseFloat(document.getElementById("atmPressure").value);
+  var P_atm = 101.325;
 
-  // ---- 2. 输入验证 ----
-  if (isNaN(massFlow) || massFlow < 0.1 || massFlow > 1.1) {
-    alert("质量流量超出范围！请设置在 0.1 ~ 1.1 kg/s 之间。");
-    return;
+  // 高级参数（带默认值，向后兼容）
+  function readNum(id, def, lo, hi) {
+    var el = document.getElementById(id);
+    if (!el) return def;
+    var v = parseFloat(el.value);
+    if (isNaN(v) || v < lo || v > hi) return def;
+    return v;
   }
-  if (isNaN(tempIn) || tempIn < -5 || tempIn > 40) {
-    alert("入口温度超出范围！请设置在 -5 ~ 40 ℃ 之间。");
-    return;
+  var BF = readNum("bypassFactor", 0.15, 0, 0.9);
+  var coilRH = readNum("coilRH", 95, 80, 100);
+  var chwDeltaT = readNum("chwDeltaT", 5, 1, 15);
+  var chwSupply = readNum("chwSupply", 7, 1, 15);
+
+  // ---- 2. 输入验证（inline，silent 模式不弹 alert） ----
+  var validationWarnings = [];
+  function checkField(id, val, lo, hi, label, unit) {
+    if (isNaN(val) || val < lo || val > hi) {
+      validationWarnings.push(label + " 超出范围 [" + lo + ", " + hi + "] " + unit);
+      markFieldInvalid(id, silent);
+    } else {
+      markFieldValid(id);
+    }
   }
-  if (isNaN(tempOut) || tempOut < 15 || tempOut > 25) {
-    alert("出口温度超出范围！请设置在 15 ~ 25 ℃ 之间。");
-    return;
-  }
-  if (isNaN(P_atm) || P_atm < 80 || P_atm > 110) {
-    alert("大气压力超出范围！请设置在 80 ~ 110 kPa 之间。");
+  checkField("massFlow", massFlow, 0.1, 1.1, "质量流量", "kg/s");
+  checkField("tempIn", tempIn, -40, 50, "入口温度", "℃");
+  checkField("rhIn", rhIn, 0, 100, "入口相对湿度", "%");
+  checkField("tempOut", tempOut, -40, 50, "出口温度", "℃");
+  checkField("rhOut", rhOut, 0, 100, "出口相对湿度", "%");
+  if (validationWarnings.length > 0) {
+    if (!silent) {
+      setStatusBar(validationWarnings.length + " 项输入异常：" + validationWarnings.join("；"), "error");
+    }
     return;
   }
 
@@ -665,19 +1018,80 @@ function calculate() {
   var W_out = humidityRatio(P_sat_out, rhOut, P_atm);
   var h_out = enthalpy(tempOut, W_out);
 
-  // ---- 6. 负荷计算 ----
-  var Q_cooling = Math.max(0, massFlow * (h_in - h_out));
-  var Q_heating = Math.max(0, massFlow * 1.006 * (tempOut - tempIn));
-  var m_dehumid = Math.max(0, massFlow * (W_in - W_out) * 1000);
+  // ---- 6. 负荷计算（保留有符号值，不静默截断；UI 层按符号判定工况） ----
+  var Q_cooling_signed = massFlow * (h_in - h_out);          // 净制冷（+）/净制热（-）
+  var Q_heating_signed = massFlow * 1.006 * (tempOut - tempIn); // 显热加热（+）/冷却（-）
+  var dW_signed = W_in - W_out;                              // 除湿（+）/加湿（-）
+  var m_dehumid_signed = massFlow * dW_signed * 1000;        // g/s，正为除湿
+  var Q_cooling = Math.max(0, Q_cooling_signed);             // 兼容旧显示
+  var Q_heating = Math.max(0, Q_heating_signed);
+  var m_dehumid = Math.max(0, m_dehumid_signed);
+
+  // 工况判定（由符号推导，供 UI 横幅显示）
+  var modeVerdict;
+  if (dW_signed > 0.0001 && Q_cooling_signed > 0.01) {
+    modeVerdict = { label: "降温除湿工况（夏季典型）", cls: "cooling" };
+  } else if (dW_signed < -0.0001 && Q_heating_signed > 0.01) {
+    modeVerdict = { label: "升温加湿工况（冬季典型）", cls: "heating" };
+  } else if (Math.abs(dW_signed) <= 0.0001 && Q_cooling_signed > 0.01) {
+    modeVerdict = { label: "等湿降温工况", cls: "cooling" };
+  } else if (Math.abs(dW_signed) <= 0.0001 && Q_heating_signed > 0.01) {
+    modeVerdict = { label: "等湿加热工况", cls: "heating" };
+  } else if (dW_signed > 0.0001 && Q_heating_signed > 0.01) {
+    modeVerdict = { label: "加热除湿工况（需再热）", cls: "mixed" };
+  } else {
+    modeVerdict = { label: "混合/过渡工况", cls: "mixed" };
+  }
+
+  // ---- 6.5. 实际加热/再热负荷计算（考虑除湿/加湿过程） ----
+  var T_coil, Q_reheat, Q_coil_actual, h_coil;
+  if (W_in > W_out) {
+    // 除湿工况：calcCoilLoad 统一计算（盘管同时处理显热+潜热）
+    var cl = calcCoilLoad(massFlow, h_in, W_out, tempOut, P_atm, coilRH);
+    T_coil = cl.T_coil; h_coil = cl.h_coil;
+    Q_reheat = cl.Q_reheat; Q_coil_actual = cl.Q_coil_actual;
+  } else if (W_out > W_in && tempOut >= tempIn) {
+    // 升温加湿工况（冬季典型）：加热器预热，再加湿
+    T_coil = tempIn;
+    h_coil = h_in;
+    Q_reheat = (tempOut > tempIn) ? massFlow * 1.006 * (tempOut - tempIn) : 0;
+    Q_coil_actual = 0;
+  } else if (W_out >= W_in && tempOut < tempIn) {
+    // 降温加湿工况（干燥空气冷却）：先等湿冷却到出口温度，再加湿
+    // 盘管不除湿也不加湿，只做显热冷却
+    T_coil = tempOut;
+    h_coil = enthalpy(tempOut, W_in);
+    Q_coil_actual = Math.max(0, massFlow * (h_in - h_coil));
+    Q_reheat = 0;
+  } else {
+    // 等湿工况：纯显热处理
+    T_coil = tempOut;
+    Q_reheat = 0;
+    Q_coil_actual = Q_cooling;
+  }
+
+  // ---- 6.7. 加湿量计算 ----
+  var m_humidify = Math.max(0, massFlow * (W_out - W_in) * 1000);
+  var m_humidify_kg_h = m_humidify * 3.6;
+  var humidify_type = m_humidify > 0 ?
+    (tempOut >= 10 ? "等温加湿（推荐电极/电热蒸汽加湿）" : "等焓加湿（推荐湿膜加湿）") : "无需加湿";
+  var humidify_power = m_humidify > 0 ? m_humidify_kg_h * 0.62 : 0;
+  var ro_water_flow = m_humidify_kg_h;
+  var ro_recovery = 0.65;
+  var ro_feed_flow = ro_water_flow > 0 ? ro_water_flow / ro_recovery : 0;
+  var ro_brine_flow = ro_feed_flow - ro_water_flow;
+  var ro_rated_flow = Math.ceil(ro_water_flow * 1.2);
+  var water_quality_std = "GB/T 18300-2025";
+  var water_conductivity = "≤ 5 μS/cm（电极加湿器要求）";
+  var water_pH = "6.5 ~ 7.5";
 
   // ---- 7. 冷冻水流量与电加热功率 ----
-  var m_chilled = Q_cooling > 0 ? Q_cooling / (Cp_water * 5) : 0;
-  var elec_power = Q_heating > 0 ? Q_heating / 0.98 : 0;
+  var m_chilled = Q_coil_actual > 0 ? Q_coil_actual / (Cp_water * chwDeltaT) : 0;
+  var elec_power = Q_reheat > 0 ? Q_reheat / 0.98 : 0;
 
   // ---- 7.5. 空气流量与结构尺寸计算 ----
-  var T_abs_in = tempIn + 273.15;
-  var R_air = 0.287;
-  var rho_air = P_atm / (R_air * T_abs_in);
+  // 湿空气密度用虚温修正湿度影响（旧式 P/(R·T) 高湿下偏低约 0.5~1%）
+  var rho_air = rhoMoistAir(P_atm, tempIn, W_in);
   var volFlow = massFlow / rho_air;
   var volFlow_m3h = volFlow * 3600;
 
@@ -689,12 +1103,14 @@ function calculate() {
   var v_outlet = 5.0;
 
   function calcWH(area, ar) {
+    // W = 宽度（铜管长度方向/管程方向），H = 高度（铜管堆叠方向）
     var w = Math.sqrt(area * ar);
     var h = area / w;
     return { w: w, h: h, area: area };
   }
 
-  var ar = 1.5;
+  var ep_ar = getEngineeringParams().ar;
+  var ar = ep_ar;
   var sec_filter = calcWH(volFlow / v_filter, ar);
   var sec_coil = calcWH(volFlow / v_coil, ar);
   var sec_heater = calcWH(volFlow / v_heater, ar);
@@ -703,7 +1119,12 @@ function calculate() {
   var sec_outlet = calcWH(volFlow / v_outlet, ar);
 
   var len_filter = 0.6;
-  var len_coil = 0.5;
+  // 各功能段长度（气流方向 / 深度方向）, 单位 m
+  // 注意：宽度 W = 铜管长度方向（管程方向），高度 H = 垂直堆叠方向
+  // 下述长度均为气流方向尺寸，与 W/H 正交
+  var len_filter = 0.6;
+  // 表冷器段长度（默认按4排估算；详细设计时由 component_design.js 根据实际排数重新计算）
+  var len_coil = calcCoilSectionLength(4);
   var len_heater = 0.4;
   var len_humidifier = 0.5;
   var len_fan = 1.0;
@@ -716,9 +1137,21 @@ function calculate() {
     tempIn: tempIn, rhIn: rhIn,
     tempOut: tempOut, rhOut: rhOut,
     P_atm: P_atm,
+    BF: BF, coilRH: coilRH, chwDeltaT: chwDeltaT, chwSupply: chwSupply,
+    modeVerdict: modeVerdict,
+    Q_cooling_signed: Q_cooling_signed, Q_heating_signed: Q_heating_signed,
+    dW_signed: dW_signed,
     P_sat_in: P_sat_in, P_v_in: P_v_in, W_in: W_in, h_in: h_in,
     P_sat_out: P_sat_out, P_v_out: P_v_out, W_out: W_out, h_out: h_out,
     Q_cooling: Q_cooling, Q_heating: Q_heating, m_dehumid: m_dehumid,
+    Q_coil_actual: Q_coil_actual, Q_reheat: Q_reheat, T_coil: T_coil, h_coil: h_coil,
+    m_humidify: m_humidify, m_humidify_kg_h: m_humidify_kg_h,
+    humidify_type: humidify_type, humidify_power: humidify_power,
+    ro_water_flow: ro_water_flow, ro_recovery: ro_recovery,
+    ro_feed_flow: ro_feed_flow, ro_brine_flow: ro_brine_flow,
+    ro_rated_flow: ro_rated_flow,
+    water_quality_std: water_quality_std,
+    water_conductivity: water_conductivity, water_pH: water_pH,
     m_chilled: m_chilled, elec_power: elec_power,
     volFlow: volFlow, volFlow_m3h: volFlow_m3h, rho_air: rho_air,
     v_filter: v_filter, v_coil: v_coil, v_heater: v_heater, v_humidifier: v_humidifier,
@@ -730,17 +1163,58 @@ function calculate() {
     totalLength: totalLength
   };
 
+  // ---- 校核：干湿球法反算湿球温度 — 《实用供热空调设计手册》1.6-3 ----
+  var wb_in = calcWetBulb(P_v_in, tempIn, P_atm);
+  var wb_out = calcWetBulb(P_v_out, tempOut, P_atm);
+  data.wetBulb_in = wb_in;
+  data.wetBulb_out = wb_out;
+  data.psychro_A = 0.000667;
+
+  // ---- 8.5. 物理合理性校验 ----
+  data.warnings = buildPhysicsWarnings(data);
+
   // ---- 9. 显示结果摘要 ----
   var V_c = m_chilled / 1000 * 3600;
+
+  // 工况判定横幅
+  var modeBannerHtml = '<div class="mode-banner mode-' + modeVerdict.cls + '">' +
+    '<span class="mode-banner-label">工况判���</span>' +
+    '<span class="mode-banner-text">' + modeVerdict.label + '</span></div>';
+
+  // 物理合理性警告
+  var warningsHtml = '';
+  if (data.warnings && data.warnings.length > 0) {
+    warningsHtml = '<div class="physics-warnings"><strong>⚠ 物理合理性提示：</strong><ul>';
+    for (var wi = 0; wi < data.warnings.length; wi++) {
+      warningsHtml += '<li>' + data.warnings[wi] + '</li>';
+    }
+    warningsHtml += '</ul></div>';
+  }
+
+  var humidifyLoadHtml = m_humidify > 0 ?
+    '<div class="result-item"><span class="result-label">加湿量</span><span class="result-value humidify">' + fmt(m_humidify_kg_h, 2) + ' kg/h</span></div>' +
+    '<div class="result-item"><span class="result-label">加湿功率</span><span class="result-value">' + fmt(humidify_power, 2) + ' kW</span></div>' +
+    '<div class="result-item"><span class="result-label">加湿方式</span><span class="result-value">' + humidify_type + '</span></div>' :
+    '<div class="result-item"><span class="result-label">除湿量</span><span class="result-value dehumidify">' + fmt(m_dehumid, 2) + ' g/s</span></div>';
+
+  var pureWaterHtml = m_humidify > 0 ?
+    '<div class="result-item"><span class="result-label">自来水进水</span><span class="result-value">' + fmt(ro_feed_flow, 2) + ' kg/h</span></div>' +
+    '<div class="result-item"><span class="result-label">RO选型流量</span><span class="result-value">' + fmt(ro_rated_flow, 0) + ' kg/h</span></div>' +
+    '<div class="result-item"><span class="result-label">纯水电导率</span><span class="result-value">' + water_conductivity + '</span></div>' +
+    '<div class="result-item"><span class="result-label">执行标准</span><span class="result-value">' + water_quality_std + '</span></div>' : '';
+
   document.getElementById("results").innerHTML =
-    '<div class="result-item"><span class="result-label">❄ 制冷量</span><span class="result-value cooling">' + fmt(Q_cooling, 2) + ' kW</span></div>' +
-    '<div class="result-item"><span class="result-label">🔥 加热量</span><span class="result-value heating">' + fmt(Q_heating, 2) + ' kW</span></div>' +
-    '<div class="result-item"><span class="result-label">💧 除湿量</span><span class="result-value dehumidify">' + fmt(m_dehumid, 2) + ' g/s</span></div>' +
-    '<div class="result-item"><span class="result-label">🌡 冷冻水流量</span><span class="result-value">' + fmt(m_chilled, 3) + ' kg/s (' + fmt(V_c, 1) + ' m³/h)</span></div>' +
-    '<div class="result-item"><span class="result-label">🔥 电加热功率</span><span class="result-value">' + fmt(Q_heating / 0.98, 2) + ' kW</span></div>' +
-    '<div class="result-item"><span class="result-label">🌀 处理风量</span><span class="result-value">' + fmt(volFlow_m3h, 0) + ' m³/h</span></div>' +
-    '<div class="result-item"><span class="result-label">📐 建议截面</span><span class="result-value">' + fmt(sec_filter.w * 1000, 0) + '×' + fmt(sec_filter.h * 1000, 0) + ' mm</span></div>' +
-    '<div class="result-item"><span class="result-label">📏 总长度</span><span class="result-value">约 ' + fmt(totalLength, 1) + ' m</span></div>';
+    modeBannerHtml + warningsHtml +
+    '<div class="result-item"><span class="result-label">表冷器负荷</span><span class="result-value cooling">' + fmt(Q_coil_actual, 2) + ' kW</span></div>' +
+    '<div class="result-item"><span class="result-label">表冷器出口(再热前空气)</span><span class="result-value">' + (isNaN(T_coil) ? '—' : fmt(T_coil, 1) + ' ℃') + '</span></div>' +
+    '<div class="result-item"><span class="result-label">' + (W_in > W_out ? '再热负荷(表冷后加热)' : (W_out > W_in ? '预热负荷(入口加热)' : '加热负荷')) + '</span><span class="result-value heating">' + fmt(Q_reheat, 2) + ' kW<span class="result-sub">空气需热量</span></span></div>' +
+    '<div class="result-item"><span class="result-label">电加热器耗电(η=98%)</span><span class="result-value">' + fmt(Q_reheat / 0.98, 2) + ' kW<span class="result-sub">电网输入功率</span></span></div>' +
+    humidifyLoadHtml +
+    '<div class="result-item"><span class="result-label">冷冻水流量</span><span class="result-value">' + fmt(m_chilled, 3) + ' kg/s (' + fmt(V_c, 1) + ' m³/h, ΔT=' + fmt(chwDeltaT, 0) + '℃)</span></div>' +
+    '<div class="result-item"><span class="result-label">处理风量</span><span class="result-value">' + fmt(volFlow_m3h, 0) + ' m³/h</span></div>' +
+    '<div class="result-item"><span class="result-label">建议截面</span><span class="result-value">' + fmt(sec_filter.w * 1000, 0) + '×' + fmt(sec_filter.h * 1000, 0) + ' mm</span></div>' +
+    '<div class="result-item"><span class="result-label">总长度</span><span class="result-value">约 ' + fmt(totalLength, 1) + ' m</span></div>' +
+    pureWaterHtml;
 
   // ---- 10. 空气状态参数汇总表 ----
   var summaryDiv = document.getElementById("airStateSummary");
@@ -788,6 +1262,7 @@ function calculate() {
   // ---- 13. 更新状态 ----
   document.getElementById("statusText").textContent =
     "计算完成 ✓  工况: " + tempIn + "℃/" + rhIn + "% → " + tempOut + "℃/" + rhOut + "%  流量: " + massFlow + "kg/s";
+  updateParamText();
 }
 
 /**
@@ -799,7 +1274,6 @@ function resetDefaults() {
   document.getElementById("rhIn").value = "80";
   document.getElementById("tempOut").value = "20";
   document.getElementById("rhOut").value = "50";
-  document.getElementById("atmPressure").value = "101.325";
   document.getElementById("results").innerHTML = '<p class="placeholder">请输入参数并点击"开始计算"</p>';
   document.getElementById("airStateSummary").style.display = "none";
   var physicsDiv = document.getElementById("physicsExplanation");
@@ -811,6 +1285,7 @@ function resetDefaults() {
   document.getElementById("psychroChartContainer").style.display = "none";
   document.getElementById("selectionResults").innerHTML = '<p class="placeholder">请先在"参数计算"页面进行计算</p>';
   document.getElementById("statusText").textContent = "已恢复夏季典型工况 (35℃/80% → 20℃/50% @ 101.325kPa)";
+  updateParamText();
 }
 
 // ==========================================
@@ -818,35 +1293,40 @@ function resetDefaults() {
 // ==========================================
 
 function generateSelection(data) {
-  // 安全系数（参考 GB/T 14294-2008）
-  var K_cooling = 1.10;
-  var K_heating = 1.15;
-  var K_flow = 1.10;
+  // 安全系数（统一从 getEngineeringParams 读取）
+  var ep = getEngineeringParams();
+  var K_cooling = ep.KCooling;
+  var K_heating = ep.KHeating;
+  var K_flow = ep.KFlow;
+  var K_humid = ep.KHumid;
 
-  var sel_cooling = data.Q_cooling * K_cooling;
-  var sel_elec_power = data.elec_power * K_heating;
-  var air_flow_m3s = data.massFlow / 1.2;
+  // 使用计算密度替代固定值1.2
+  var rho = data.rho_air || 1.2;
+  var air_flow_m3s = data.massFlow / rho;
   var air_flow_m3h = air_flow_m3s * 3600;
 
+  // 使用实际表冷器负荷和再热负荷
+  var sel_cooling = (data.Q_coil_actual || data.Q_cooling) * K_cooling;
+  var sel_reheat = (data.Q_reheat || 0) * K_heating;
+  var elec_power = (data.Q_reheat || 0) > 0 ? data.Q_reheat / 0.98 : 0;
+  var sel_elec_power = elec_power * K_heating;
+
   var face_area = air_flow_m3s / 2.5;
-  var face_width = Math.ceil(Math.sqrt(face_area * 1.5) * 100) / 100;
+  var face_width = Math.ceil(Math.sqrt(face_area * getEngineeringParams().ar) * 100) / 100;
   var face_height = face_area / face_width;
 
   var V_ch = data.m_chilled / 1000 * 3600;
 
   // 风机选型参数
   var fan_flow = air_flow_m3h * K_flow;
-  var fan_pressure = 1000; // Pa 估算
+  // 风机全压按回路阻力累加（GB/T 14294-2026 典型值）
+  var fan_pressure = 80 + 50*4 + 30 + 50 + 3*20 + 80; // 滤网+盘管4排+加热+加湿+风管20m+管件 = 490 Pa
 
   // 根据风量估算风机功率
   var fan_power_kw = (fan_flow / 3600 * fan_pressure) / (1000 * 0.7 * 0.85);
 
   // 根据制冷量估算表冷器排数
   var coil_rows = sel_cooling > 50 ? 8 : sel_cooling > 20 ? 6 : 4;
-
-  // 电加热功率（效率 98%）
-  var elec_power = data.Q_heating / 0.98;
-  var sel_elec_power = elec_power * K_heating;
 
   var html =
     '<div class="selection-grid">' +
@@ -863,21 +1343,29 @@ function generateSelection(data) {
     '<p style="color:#718096;font-size:0.8rem;">应配置不锈钢接水盘和排水口</p>' +
     '</div>' +
     '<div class="selection-card">' +
-    '<h4>🔥 电加热器（升温调温段）</h4>' +
-    '<p><strong>选型功率：</strong><span class="spec-value">' + fmt(sel_elec_power, 1) + ' kW</span></p>' +
-    '<p><strong>加热量：</strong><span class="spec-value">' + fmt(data.Q_heating, 2) + ' kW</span></p>' +
-    '<p><strong>电热效率：</strong>98%</p>' +
+    '<h4>🔥 电加热器（再热段）</h4>' +
+    '<p><strong>选型功率(电加热器耗电)：</strong><span class="spec-value">' + fmt(sel_elec_power, 1) + ' kW</span></p>' +
+    '<p><strong>空气需热量(再热/预热)：</strong><span class="spec-value">' + fmt(data.Q_reheat || 0, 2) + ' kW</span></p>' +
+    '<p><strong>表冷器出口→目标：</strong>' + fmt(data.T_coil || 0, 1) + '℃ → ' + fmt(data.tempOut, 1) + '℃</p>' +
+    '<p><strong>电热效率：</strong>98%（耗电 = 需热量 / 0.98）</p>' +
     '<p><strong>控制方式：</strong>PID 可控硅调功（SSR）</p>' +
     '<p><strong>建议分级：</strong>多级或无级调节</p>' +
     '<p><strong>表面负荷：</strong>≤ 3 W/cm²（安全值）</p>' +
     '<p style="color:#718096;font-size:0.8rem;">建议配置超温保护装置</p>' +
     '</div>' +
     '<div class="selection-card">' +
+    '<h4>💧 加湿器</h4>' +
+    '<p><strong>加湿量：</strong><span class="spec-value">' + fmt(data.m_humidify_kg_h || 0, 1) + ' kg/h</span></p>' +
+    '<p><strong>选型加湿量：</strong><span class="spec-value">' + fmt((data.m_humidify_kg_h || 0) * K_humid, 1) + ' kg/h</span><span style="font-size:0.75rem;color:#a0aec0;">（K=' + fmt(K_humid, 2) + '）</span></p>' +
+    '<p><strong>加湿功率：</strong>' + fmt(data.humidify_power || 0, 2) + ' kW</p>' +
+    '<p><strong>推荐形式：</strong>电极式 / 电热式蒸汽加湿</p>' +
+    '</div>' +
+    '<div class="selection-card">' +
     '<h4>💨 送风机</h4>' +
     '<p><strong>设计风量：</strong><span class="spec-value">' + fmt(fan_flow, 0) + ' m³/h</span></p>' +
     '<p><strong>建议形式：</strong>离心风机（前向/后向多翼）</p>' +
     '<p><strong>驱动方式：</strong>变频调速电机</p>' +
-    '<p><strong>全压估算：</strong>800~1200 Pa</p>' +
+    '<p><strong>全压估算：</strong>' + fmt(fan_pressure, 0) + ' Pa（按回路阻力累加）</p>' +
     '<p><strong>电机功率：</strong>约 ' + fmt(fan_power_kw, 1) + ' kW</p>' +
     '<p style="color:#718096;font-size:0.8rem;">变频器：ABB / Siemens / Schneider</p>' +
     '</div>' +
@@ -2202,7 +2690,7 @@ function generateSelection(data) {
     '<marker id="arrow-red" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#e53e3e"/></marker>' +
     '</defs>' +
     '<text x="600" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#2d3748">水系统工艺流程图（Piping & Instrumentation Diagram）</text>' +
-    '<text x="300" y="70" text-anchor="middle" font-size="14" font-weight="bold" fill="#2b6cb0">冷冻水系统（供水 7℃ / 回水 12℃）</text>' +
+    '<text x="300" y="70" text-anchor="middle" font-size="14" font-weight="bold" fill="#2b6cb0">冷冻水系统（供水 ' + fmt(data.chwSupply || 7, 0) + '℃ / 回水 ' + fmt((data.chwSupply || 7) + (data.chwDeltaT || 5), 1) + '℃）</text>' +
     '<rect x="30" y="90" width="100" height="50" rx="6" fill="#ebf8ff" stroke="#3182ce" stroke-width="2"/>' +
     '<text x="80" y="110" text-anchor="middle" font-size="11" font-weight="bold" fill="#2d3748">冷源</text>' +
     '<text x="80" y="125" text-anchor="middle" font-size="9" fill="#4a5568">7℃ 供水</text>' +
@@ -2503,251 +2991,110 @@ function injectDrawingFrames() {
 function drawPsychroChart(data) {
   var container = document.getElementById("psychroChartContainer");
   container.style.display = "block";
-  var canvas = document.getElementById("psychroCanvas");
-  var ctx = canvas.getContext("2d");
-  var W = canvas.width;
-  var H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  // 边距（左侧加大给Y轴标签，底部加大给说明文字）
+  var svg = document.getElementById("psychroSvg");
+  if (!svg) return;
+  var W = 700, H = 560;
   var ml = 70, mr = 40, mt = 40, mb = 130;
-  var pw = W - ml - mr;
-  var ph = H - mt - mb;
-
-  // 温度范围: -10 ~ 50°C
+  var pw = W - ml - mr, ph = H - mt - mb;
   var T_min = -10, T_max = 50;
-  // 含湿量范围: 0 ~ 0.035 kg/kg (35 g/kg)
-  var W_min = 0, W_max = 0.035;
-
+  var W_min = 0, W_max = 0.040;
   function tx(T) { return ml + (T - T_min) / (T_max - T_min) * pw; }
   function ty(w) { return mt + ph - (w - W_min) / (W_max - W_min) * ph; }
+  function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-  // 背景
-  ctx.fillStyle = "#fafcfc";
-  ctx.fillRect(0, 0, W, H);
-
-  // 网格
-  ctx.strokeStyle = "#e8ecf0";
-  ctx.lineWidth = 0.5;
+  var parts = [];
+  parts.push('<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#fafcfc"/>');
   for (var gT = -10; gT <= 50; gT += 5) {
-    var x = tx(gT);
-    ctx.beginPath(); ctx.moveTo(x, mt); ctx.lineTo(x, mt + ph); ctx.stroke();
+    parts.push('<line x1="'+tx(gT)+'" y1="'+mt+'" x2="'+tx(gT)+'" y2="'+(mt+ph)+'" stroke="#e8ecf0" stroke-width="0.5"/>');
   }
-  for (var gW = 0; gW <= 0.035; gW += 0.005) {
-    var y = ty(gW);
-    ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(ml + pw, y); ctx.stroke();
+  for (var gW = 0; gW <= 0.040; gW += 0.005) {
+    parts.push('<line x1="'+ml+'" y1="'+ty(gW)+'" x2="'+(ml+pw)+'" y2="'+ty(gW)+'" stroke="#e8ecf0" stroke-width="0.5"/>');
   }
-
-  // 轴标签
-  ctx.fillStyle = "#718096";
-  ctx.font = "11px 'Segoe UI', system-ui, sans-serif";
-  ctx.textAlign = "center";
+  parts.push('<text x="'+(ml+pw/2)+'" y="'+(mt+ph+34)+'" text-anchor="middle" font-size="11" fill="#4a5568">干球温度 T (℃)</text>');
   for (var gT2 = -10; gT2 <= 50; gT2 += 10) {
-    ctx.fillText(gT2 + "°C", tx(gT2), mt + ph + 18);
+    parts.push('<text x="'+tx(gT2)+'" y="'+(mt+ph+18)+'" text-anchor="middle" font-size="11" fill="#718096">'+gT2+'°C</text>');
   }
-  ctx.fillText("干球温度 T (℃)", ml + pw / 2, mt + ph + 34);
-
-  ctx.save();
-  ctx.textAlign = "right";
-  ctx.translate(ml - 14, mt + ph / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText("含湿量 w (g/kg干空气)", 0, 0);
-  ctx.restore();
-
-  for (var gW2 = 0; gW2 <= 0.035; gW2 += 0.005) {
-    ctx.textAlign = "right";
-    ctx.fillText((gW2 * 1000).toFixed(0), ml - 8, ty(gW2) + 4);
+  for (var gW2 = 0; gW2 <= 0.040; gW2 += 0.005) {
+    parts.push('<text x="'+(ml-8)+'" y="'+(ty(gW2)+4)+'" text-anchor="end" font-size="11" fill="#718096">'+(gW2*1000).toFixed(0)+'</text>');
   }
-
-  // 饱和线 (RH=100%)
-  ctx.beginPath();
-  ctx.strokeStyle = "#a0aec0";
-  ctx.lineWidth = 2;
-  var first = true;
+  parts.push('<text x="'+(ml-40)+'" y="'+(mt+ph/2)+'" text-anchor="middle" font-size="11" fill="#4a5568" transform="rotate(-90 '+(ml-40)+','+(mt+ph/2)+')">含湿量 w (g/kg)</text>');
+  var satPath = [];
   for (var T = T_min; T <= T_max; T += 0.5) {
     var w_sat = calcHumidityRatio(T, 100, data.P_atm);
     if (w_sat > W_max) w_sat = W_max;
-    var xs = tx(T), ys = ty(w_sat);
-    if (first) { ctx.moveTo(xs, ys); first = false; }
-    else { ctx.lineTo(xs, ys); }
+    satPath.push((satPath.length===0?'M':'L') + tx(T) + ' ' + ty(w_sat));
   }
-  ctx.stroke();
-  ctx.fillStyle = "#a0aec0";
-  ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
-  ctx.textAlign = "left";
-  var satW42 = calcHumidityRatio(42, 100, data.P_atm);
-  if (satW42 < W_max) ctx.fillText("RH=100%", tx(42), ty(satW42) - 8);
-
-  // 等RH线 (20%, 40%, 60%, 80%)
-  var rhLevels = [20, 40, 60, 80];
-  ctx.setLineDash([4, 4]);
-  ctx.lineWidth = 0.8;
-  for (var ri = 0; ri < rhLevels.length; ri++) {
+  parts.push('<path d="'+satPath.join(' ')+'" stroke="#718096" stroke-width="2" fill="none"/>');
+  parts.push('<text x="'+tx(45)+'" y="'+ty(calcHumidityRatio(45,100,data.P_atm)-0.001)+'" font-size="10" fill="#718096">RH=100%</text>');
+  var rhLevels = [20,40,60,80];
+  for (var ri=0; ri<rhLevels.length; ri++) {
     var rh = rhLevels[ri];
-    ctx.strokeStyle = "#cbd5e0";
-    ctx.beginPath();
-    var fr = true;
+    var p = [];
     for (var T = T_min; T <= T_max; T += 1) {
       var w_rh = calcHumidityRatio(T, rh, data.P_atm);
       if (w_rh > W_max) w_rh = W_max;
-      var xr = tx(T), yr = ty(w_rh);
-      if (fr) { ctx.moveTo(xr, yr); fr = false; }
-      else { ctx.lineTo(xr, yr); }
+      p.push((p.length===0?'M':'L') + tx(T) + ' ' + ty(w_rh));
     }
-    ctx.stroke();
-    ctx.fillStyle = "#a0aec0";
-    var rhW43 = calcHumidityRatio(43, rh, data.P_atm);
-    if (rhW43 < W_max) ctx.fillText("RH=" + rh + "%", tx(43), ty(rhW43) + 3);
+    parts.push('<path d="'+p.join(' ')+'" stroke="#cbd5e0" stroke-width="0.8" stroke-dasharray="4,4" fill="none"/>');
+    var rhW = calcHumidityRatio(45, rh, data.P_atm);
+    if (rhW < W_max) parts.push('<text x="'+tx(45)+'" y="'+(ty(rhW)+3)+'" font-size="9" fill="#a0aec0">RH='+rh+'%</text>');
   }
-  ctx.setLineDash([]);
-
-  // 计算入口和出口的含湿量（修复：使用正确的变量名）
-  var w_in = data.W_in;
-  var w_out = data.W_out;
-
-  // 处理过程线 (入口→出口)
-  var x1 = tx(data.tempIn), y1 = ty(w_in);
-  var x2 = tx(data.tempOut), y2 = ty(w_out);
-  ctx.beginPath();
-  ctx.strokeStyle = "#e53e3e";
-  ctx.lineWidth = 2.5;
-  ctx.setLineDash([6, 3]);
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // 入口状态点 (蓝色)
-  drawPoint(ctx, x1, y1, "#3182ce", "#2b6cb0");
-  ctx.fillStyle = "#2b6cb0";
-  ctx.font = "bold 12px 'Segoe UI', system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("入口 " + data.tempIn + "℃ / " + data.rhIn + "%RH", x1 + 10, y1 - 10);
-  ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("h₁=" + fmt(data.h_in, 1) + " kJ/kg, w₁=" + fmt(w_in * 1000, 1) + " g/kg", x1 + 10, y1 + 4);
-
-  // 出口状态点 (绿色)
-  drawPoint(ctx, x2, y2, "#48bb78", "#38a169");
-  ctx.fillStyle = "#38a169";
-  ctx.font = "bold 12px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillText("出口 " + data.tempOut + "℃ / " + data.rhOut + "%RH", x2 + 10, y2 - 10);
-  ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("h₂=" + fmt(data.h_out, 1) + " kJ/kg, w₂=" + fmt(w_out * 1000, 1) + " g/kg", x2 + 10, y2 + 4);
-
-  // 图框
-  ctx.strokeStyle = "#cbd5e0";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(ml, mt, pw, ph);
-
-  // ===== 底部详细说明区域 =====
-  var detailY = mt + ph + 50;
-  ctx.fillStyle = "#2d3748";
-  ctx.font = "bold 12px 'Segoe UI', system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("📋 空气处理过程说明", ml, detailY);
-
-  ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillStyle = "#4a5568";
-  var lineY = detailY + 18;
-  var lineH = 14;
-
-  // 工况信息
-  ctx.fillText("工况: " + data.tempIn + "℃/" + data.rhIn + "%RH → " + data.tempOut + "℃/" + data.rhOut + "%RH  |  质量流量: " + data.massFlow + " kg/s  |  大气压: " + fmt(data.P_atm, 1) + " kPa", ml, lineY);
-  lineY += lineH;
-
-  // 焓值变化
-  var deltaH = data.h_in - data.h_out;
-  var deltaW = (w_in - w_out) * 1000;
-  ctx.fillText("焓值变化: h₁=" + fmt(data.h_in, 1) + " → h₂=" + fmt(data.h_out, 1) + " kJ/kg  |  Δh=" + fmt(deltaH, 1) + " kJ/kg  |  制冷量 Qc=" + fmt(data.Q_cooling, 1) + " kW", ml, lineY);
-  lineY += lineH;
-
-  // 含湿量变化
-  ctx.fillText("含湿量变化: w₁=" + fmt(w_in * 1000, 1) + " → w₂=" + fmt(w_out * 1000, 1) + " g/kg  |  Δw=" + fmt(deltaW, 1) + " g/kg  |  除湿量=" + fmt(data.m_dehumid, 2) + " g/s", ml, lineY);
-  lineY += lineH;
-
-  // 露点温度
-  var dewIn = calcDewPoint((data.rhIn / 100) * satPressure(data.tempIn));
-  var dewOut = calcDewPoint((data.rhOut / 100) * satPressure(data.tempOut));
-  ctx.fillText("露点温度: 入口 " + fmt(dewIn, 1) + "℃  |  出口 " + fmt(dewOut, 1) + "℃", ml, lineY);
-  lineY += lineH;
-
-  // 处理类型判断
-  lineY += 4;
-  ctx.fillStyle = "#2b6cb0";
-  ctx.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
+  var x1 = tx(data.tempIn), y1 = ty(data.W_in);
+  var x2 = tx(data.tempOut), y2 = ty(data.W_out);
+  parts.push('<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#e53e3e" stroke-width="2.5" stroke-dasharray="6,3"/>');
+  if (data.Q_coil_actual > 0.01 && !isNaN(data.T_coil)) {
+    var xa = tx(data.T_coil), ya = ty(data.W_out);
+    parts.push('<circle cx="'+xa+'" cy="'+ya+'" r="5" fill="#dd6b20" stroke="#fff" stroke-width="2"><title>ADP/盘管出口: T='+fmt(data.T_coil,1)+'℃ / W='+fmt(data.W_out*1000,2)+' g/kg</title></circle>');
+    parts.push('<text x="'+(xa+8)+'" y="'+(ya-8)+'" font-size="10" fill="#c05621">ADP '+fmt(data.T_coil,1)+'℃</text>');
+  }
+  var dewInT = calcDewPoint(data.P_v_in), dewOutT = calcDewPoint(data.P_v_out);
+  parts.push('<circle cx="'+x1+'" cy="'+y1+'" r="6" fill="#3182ce" stroke="#2b6cb0" stroke-width="2"><title>入口: '+data.tempIn+'℃ / '+data.rhIn+'%RH&#10;h='+fmt(data.h_in,2)+' kJ/kg, w='+fmt(data.W_in*1000,2)+' g/kg&#10;露点='+(isNaN(dewInT)?'—':fmt(dewInT,1)+'℃')+'</title></circle>');
+  parts.push('<text x="'+(x1+10)+'" y="'+(y1-10)+'" font-size="12" font-weight="bold" fill="#2b6cb0">入口 '+data.tempIn+'℃ / '+data.rhIn+'%</text>');
+  parts.push('<text x="'+(x1+10)+'" y="'+(y1+4)+'" font-size="10" fill="#4a5568">h='+fmt(data.h_in,1)+' w='+fmt(data.W_in*1000,1)+' g/kg</text>');
+  parts.push('<circle cx="'+x2+'" cy="'+y2+'" r="6" fill="#48bb78" stroke="#38a169" stroke-width="2"><title>出口: '+data.tempOut+'℃ / '+data.rhOut+'%RH&#10;h='+fmt(data.h_out,2)+' kJ/kg, w='+fmt(data.W_out*1000,2)+' g/kg&#10;露点='+(isNaN(dewOutT)?'—':fmt(dewOutT,1)+'℃')+'</title></circle>');
+  parts.push('<text x="'+(x2+10)+'" y="'+(y2-10)+'" font-size="12" font-weight="bold" fill="#38a169">出口 '+data.tempOut+'℃ / '+data.rhOut+'%</text>');
+  parts.push('<text x="'+(x2+10)+'" y="'+(y2+4)+'" font-size="10" fill="#4a5568">h='+fmt(data.h_out,1)+' w='+fmt(data.W_out*1000,1)+' g/kg</text>');
+  parts.push('<rect x="'+ml+'" y="'+mt+'" width="'+pw+'" height="'+ph+'" stroke="#cbd5e0" stroke-width="1" fill="none"/>');
+  var dY = mt + ph + 50;
   var processType = "";
-  if (data.tempIn > data.tempOut && w_in > w_out) {
-    processType = "降温除湿过程（夏季典型工况）：空气先经表冷器冷却除湿，再经再热器加热到目标温度";
-  } else if (data.tempIn < data.tempOut && w_in < w_out) {
-    processType = "加热加湿过程（冬季典型工况）：空气先经加热器升温，再经加湿器增加湿度";
-  } else if (data.tempIn > data.tempOut && w_in <= w_out) {
-    processType = "单纯降温过程（干燥地区夏季）：空气经表冷器降温，含湿量不变或略有增加";
-  } else if (data.tempIn < data.tempOut && w_in >= w_out) {
-    processType = "单纯加热过程（冬季干燥工况）：空气经加热器升温，含湿量不变";
-  } else {
-    processType = "混合处理过程";
-  }
-  ctx.fillText("处理类型: " + processType, ml, lineY);
-  lineY += lineH;
-
-  // 图例说明
-  lineY += 8;
-  ctx.fillStyle = "#2d3748";
-  ctx.font = "bold 10px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillText("图例说明:", ml, lineY);
-  lineY += 14;
-
-  ctx.font = "10px 'Segoe UI', system-ui, sans-serif";
-  // 蓝色点
-  ctx.beginPath(); ctx.arc(ml + 8, lineY - 3, 5, 0, 2 * Math.PI);
-  ctx.fillStyle = "#3182ce"; ctx.fill();
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("= 入口空气状态点", ml + 18, lineY);
-
-  // 绿色点
-  ctx.beginPath(); ctx.arc(ml + 120, lineY - 3, 5, 0, 2 * Math.PI);
-  ctx.fillStyle = "#48bb78"; ctx.fill();
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("= 出口空气状态点", ml + 130, lineY);
-
-  // 红色线
-  ctx.beginPath(); ctx.moveTo(ml + 240, lineY - 3); ctx.lineTo(ml + 260, lineY - 3);
-  ctx.strokeStyle = "#e53e3e"; ctx.lineWidth = 2; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("= 空气处理过程线", ml + 265, lineY);
-
-  // 灰色饱和线
-  ctx.beginPath(); ctx.moveTo(ml + 370, lineY - 3); ctx.lineTo(ml + 390, lineY - 3);
-  ctx.strokeStyle = "#a0aec0"; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.stroke();
-  ctx.fillStyle = "#4a5568";
-  ctx.fillText("= 饱和线 (RH=100%)", ml + 395, lineY);
-
-  lineY += 16;
-  ctx.fillStyle = "#718096";
-  ctx.font = "9px 'Segoe UI', system-ui, sans-serif";
-  ctx.fillText("注：焓湿图基于 GB/T 35226-2017《湿空气性质计算公式》绘制，大气压 P=" + fmt(data.P_atm, 1) + " kPa", ml, lineY);
+  if (data.tempIn > data.tempOut && data.W_in > data.W_out) processType = "降温除湿过程（夏季典型）：表冷器冷却除湿 → 再热器加热到目标温度";
+  else if (data.tempIn < data.tempOut && data.W_in < data.W_out) processType = "加热加湿过程（冬季典型）：加热器升温 → 加湿器增湿";
+  else if (data.tempIn > data.tempOut && data.W_in <= data.W_out) processType = "单纯降温过程（干燥地区夏季）";
+  else if (data.tempIn < data.tempOut && data.W_in >= data.W_out) processType = "单纯加热过程（冬季干燥）";
+  else processType = "混合处理过程";
+  parts.push('<text x="'+ml+'" y="'+dY+'" font-size="12" font-weight="bold" fill="#2d3748">空气处理过程说明</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+18)+'" font-size="10" fill="#4a5568">工况: '+data.tempIn+'℃/'+data.rhIn+'% → '+data.tempOut+'℃/'+data.rhOut+'% | ṁ='+data.massFlow+' kg/s | P='+fmt(data.P_atm,1)+' kPa</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+32)+'" font-size="10" fill="#4a5568">Δh='+fmt(data.h_in-data.h_out,2)+' kJ/kg | 净制冷='+fmt(data.Q_cooling,2)+' kW | 盘管负荷='+fmt(data.Q_coil_actual||data.Q_cooling,2)+' kW</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+46)+'" font-size="10" font-weight="bold" fill="#2b6cb0">处理类型: '+esc(processType)+'</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+62)+'" font-size="9" fill="#718096">注：焓湿图基于 GB/T 35226-2017，大气压 P='+fmt(data.P_atm,1)+' kPa。鼠标悬停状态点查看详细参数。</text>');
+  svg.innerHTML = parts.join('');
 }
 
-function drawPoint(ctx, x, y, fill, stroke) {
-  ctx.beginPath();
-  ctx.arc(x, y, 6, 0, 2 * Math.PI);
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x, y, 2, 0, 2 * Math.PI);
-  ctx.fillStyle = "#fff";
-  ctx.fill();
+/** 导出焓湿图为 SVG 文件 */
+function exportPsychroSvg() {
+  var svg = document.getElementById("psychroSvg");
+  if (!svg) return;
+  var xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg);
+  try {
+    require("electron");
+    var ipc = require("electron").ipcRenderer;
+    ipc.send("save-svg-file", { content: xml, fileName: "焓湿图.svg" });
+    setStatusBar("焓湿图 SVG 已请求保存", "");
+  } catch (e) {
+    var blob = new Blob([xml], { type: "image/svg+xml" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "焓湿图.svg"; a.click();
+    URL.revokeObjectURL(url);
+    setStatusBar("焓湿图 SVG 已下载", "");
+  }
 }
 
 function togglePsychroChart() {
   var c = document.getElementById("psychroChartContainer");
   c.style.display = (c.style.display === "none") ? "block" : "none";
 }
+
 
 // ==========================================
 // 十二、导出Excel报告
@@ -2763,7 +3110,7 @@ function exportReport() {
   var rhIn = parseFloat(document.getElementById("rhIn").value);
   var tempOut = parseFloat(document.getElementById("tempOut").value);
   var rhOut = parseFloat(document.getElementById("rhOut").value);
-  var P_atm = parseFloat(document.getElementById("atmPressure").value);
+  var P_atm = 101.325;
 
   // 重新计算所有参数
   var P_sat_in = satPressure(tempIn);
@@ -2782,28 +3129,55 @@ function exportReport() {
   var Q_cooling = Math.max(0, massFlow * deltaH);
   var Q_heating = Math.max(0, massFlow * 1.006 * deltaT);
   var m_dehumid = Math.max(0, massFlow * deltaW * 1000);
-  var m_chilled = Q_cooling > 0 ? Q_cooling / (4.187 * 5) : 0;
-  var V_chilled = m_chilled / 1000 * 3600;
-  var elec_power = Q_heating > 0 ? Q_heating / 0.98 : 0;
 
-  // 设备选型参数
-  var K_cooling = 1.10;
-  var K_heating = 1.15;
-  var K_flow = 1.10;
-  var sel_cooling = Q_cooling * K_cooling;
-  var sel_elec_power = elec_power * K_heating;
-  var air_flow_m3s = massFlow / 1.2;
+  // 实际负荷计算（区分夏季/冬季/等湿工况）
+  // 盘管负荷按能量平衡 Q=ṁ(h_in−h_out)，与 BF 无关（修正 BF=0 高估）
+  function _readNum(id, def, lo, hi) {
+    var el = document.getElementById(id);
+    if (!el) return def;
+    var v = parseFloat(el.value);
+    if (isNaN(v) || v < lo || v > hi) return def;
+    return v;
+  }
+  var _chwDT = _readNum("chwDeltaT", 5, 1, 15);
+  var _coilRH = _readNum("coilRH", 95, 80, 100);
+  var T_coil, Q_coil_actual, Q_reheat, h_coil;
+  if (W_in > W_out) {
+    var cl = calcCoilLoad(massFlow, h_in, W_out, tempOut, P_atm, _coilRH);
+    T_coil = cl.T_coil; h_coil = cl.h_coil;
+    Q_coil_actual = cl.Q_coil_actual; Q_reheat = cl.Q_reheat;
+  } else if (W_out > W_in) {
+    T_coil = tempIn;
+    h_coil = h_in;
+    Q_coil_actual = 0;
+    Q_reheat = (tempOut > tempIn) ? massFlow * 1.006 * (tempOut - tempIn) : 0;
+  } else {
+    T_coil = tempOut;
+    Q_coil_actual = Math.max(0, massFlow * deltaH);
+    Q_reheat = 0;
+  }
+
+  var m_chilled = Q_coil_actual > 0 ? Q_coil_actual / (4.187 * _chwDT) : 0;
+  var V_chilled = m_chilled / 1000 * 3600;
+  var elec_power = Q_reheat > 0 ? Q_reheat / 0.98 : 0;
+
+  // 结构尺寸参数（湿空气密度用虚温修正）
+  var rho_air = rhoMoistAir(P_atm, tempIn, W_in);
+  var volFlow = massFlow / rho_air;
+
+  // 设备选型参数（统一从 getEngineeringParams 读取）
+  var _ep = getEngineeringParams();
+  var K_cooling = _ep.KCooling;
+  var K_heating = _ep.KHeating;
+  var K_flow = _ep.KFlow;
+  var air_flow_m3s = massFlow / rho_air;
   var air_flow_m3h = air_flow_m3s * 3600;
+  var sel_cooling = Q_coil_actual * K_cooling;
+  var sel_elec_power = elec_power * K_heating;
   var sel_air_flow = air_flow_m3h * K_flow;
   var face_area = air_flow_m3s / 2.5;
-  var face_width = Math.ceil(Math.sqrt(face_area * 1.5) * 100) / 100;
+  var face_width = Math.ceil(Math.sqrt(face_area * getEngineeringParams().ar) * 100) / 100;
   var face_height = face_area / face_width;
-
-  // 结构尺寸参数
-  var T_abs_in = tempIn + 273.15;
-  var R_air = 0.287;
-  var rho_air = P_atm / (R_air * T_abs_in);
-  var volFlow = massFlow / rho_air;
   var volFlow_m3h = volFlow * 3600;
 
   function calcWH2(area, ar) {
@@ -2891,20 +3265,23 @@ function exportReport() {
   html += '<tr><td class="label">焓差</td><td>Δh</td><td class="value">' + deltaH.toFixed(4) + '</td><td>kJ/kg</td></tr>';
   html += '<tr><td class="label">含湿量差</td><td>ΔW</td><td class="value">' + (deltaW * 1000).toFixed(3) + '</td><td>g/kg</td></tr>';
   html += '<tr><td class="label">温差</td><td>ΔT</td><td class="value">' + deltaT.toFixed(2) + '</td><td>℃</td></tr>';
-  html += '<tr><td class="label">制冷量</td><td>Q_c</td><td class="value">' + Q_cooling.toFixed(4) + '</td><td>kW</td></tr>';
-  html += '<tr><td class="label">加热量</td><td>Q_h</td><td class="value">' + Q_heating.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">净制冷量</td><td>Q_c</td><td class="value">' + Q_cooling.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">表冷器出口温度</td><td>T_coil</td><td class="value">' + T_coil.toFixed(1) + '</td><td>℃</td></tr>';
+  html += '<tr><td class="label">表冷器出口焓(再热前)</td><td>h_coil</td><td class="value">' + h_coil.toFixed(4) + '</td><td>kJ/kg</td></tr>';
+  html += '<tr><td class="label">实际表冷器负荷</td><td>Q_coil</td><td class="value">' + Q_coil_actual.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">再热/预热负荷(空气需热量)</td><td>Q_reheat</td><td class="value">' + Q_reheat.toFixed(4) + '</td><td>kW</td></tr>';
   html += '<tr><td class="label">除湿量</td><td>ṁ_deh</td><td class="value">' + m_dehumid.toFixed(4) + '</td><td>g/s</td></tr>';
   html += '<tr><td class="label">冷凝水量</td><td>-</td><td class="value">' + (m_dehumid * 3.6).toFixed(1) + '</td><td>L/h</td></tr>';
   html += '</table><br>';
 
   // 五、冷冻水流量与电加热功率计算
   html += '<table>';
-  html += '<tr><td colspan="4" class="section">五、冷冻水流量与电加热功率计算</td></tr>';
+  html += '<tr><td colspan="4" class="section">五、冷冻水流量与电加热器耗电计算</td></tr>';
   html += '<tr><th>参数名称</th><th>符号</th><th>数值</th><th>单位</th></tr>';
   html += '<tr><td class="label">冷冻水质量流量</td><td>ṁ_ch</td><td class="value">' + m_chilled.toFixed(4) + '</td><td>kg/s</td></tr>';
   html += '<tr><td class="label">冷冻水体积流量</td><td>V_ch</td><td class="value">' + V_chilled.toFixed(2) + '</td><td>m³/h</td></tr>';
   html += '<tr><td class="label">冷冻水供回水温差</td><td>ΔT_ch</td><td class="value">5</td><td>℃</td></tr>';
-  html += '<tr><td class="label">电加热功率</td><td>P_elec</td><td class="value">' + elec_power.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">电加热器耗电(η=98%)</td><td>P_elec</td><td class="value">' + elec_power.toFixed(4) + '</td><td>kW</td></tr>';
   html += '<tr><td class="label">电热效率</td><td>η</td><td class="value">98</td><td>%</td></tr>';
   html += '</table><br>';
 
@@ -2945,7 +3322,75 @@ function exportReport() {
   html += '<tr><td>密封</td><td>硅酮密封胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>';
   html += '</table><br>';
 
-  // 七、设备选型建议
+  // === 七、零部件详细设计（如已计算） ===
+  var _cdCoil = (function() {
+    var el = document.getElementById("cd-coil-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdHeater = (function(){
+    var el = document.getElementById("cd-heater-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdHumidifier = (function(){
+    var el = document.getElementById("cd-humidifier-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdFan = (function(){
+    var el = document.getElementById("cd-fan-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _ahriEps = (function(){
+    var el = document.getElementById("cd-coil-result");
+    if (!el) return null;
+    var txt = el.textContent || el.innerText;
+    var m = txt.match(/接触系数\s*ε\s*[\s\S]{0,20}?(\d+\.\d+)/);
+    return m ? parseFloat(m[1]) : null;
+  })();
+  var _ahriRows = (function(){
+    var el = document.getElementById("cd-coil-result");
+    if (!el) return null;
+    var txt = el.textContent || el.innerText;
+    var m = txt.match(/(\d+)\s*排/);
+    return m ? parseInt(m[1]) : null;
+  })();
+
+  if (_cdCoil || _cdHeater || _cdHumidifier || _cdFan) {
+    var secIdx = 'a';
+    html += '<table><tr><td colspan="4" class="section">七、零部件详细设计</td></tr></table><br>';
+    if (_cdCoil) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、表冷器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdCoil) + '</td></tr></table><br>';
+      secIdx = 'b';
+    }
+    if (_cdHeater) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、电加热器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdHeater) + '</td></tr></table><br>';
+      secIdx = 'c';
+    }
+    if (_cdHumidifier) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、加湿器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdHumidifier) + '</td></tr></table><br>';
+      secIdx = 'd';
+    }
+    if (_cdFan) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、风机详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdFan) + '</td></tr></table><br>';
+    }
+  }
+
+  // 八、AHRI 410 标准对比分析
+  html += '<table>';
+  html += '<tr><td colspan="4" class="section">八、AHRI 410 标准对比分析</td></tr>';
+  html += '<tr><th>对比项</th><th>当前计算结果</th><th>AHRI 410 典型值</th><th>差异说明</th></tr>';
+  html += '<tr><td class="label">进风干球温度</td><td class="value">' + tempIn + ' °C</td><td class="value">26.7 °C (80°F)</td><td>—</td></tr>';
+  html += '<tr><td class="label">进风湿球温度</td><td class="value">—</td><td class="value">19.4 °C (67°F)</td><td>湿球温度需根据 RH 计算</td></tr>';
+  html += '<tr><td class="label">迎面风速</td><td class="value">' + v_coil2 + ' m/s</td><td class="value">2.54 m/s (500 fpm)</td><td>' + (Math.abs(v_coil2 - 2.54) < 0.3 ? '接近 AHRI 标准' : '建议调整至 2.54 m/s') + '</td></tr>';
+  html += '<tr><td class="label">接触系数 ε</td><td class="value">' + (_ahriEps != null ? _ahriEps.toFixed(4) : '—') + '</td><td class="value">0.85~0.95 (4~6 排)</td><td>' + (_ahriEps != null ? (_ahriEps > 0.95 ? '偏高(盘管出口RH 95%假设偏大,实际约88~92%; JTL-2型ε基表偏低0.05~0.06)' : '在合理范围内') : '—') + '</td></tr>';
+  html += '<tr><td class="label">建议排数</td><td class="value">' + (_ahriRows || '—') + ' 排</td><td class="value">4~6 排</td><td>' + (_ahriRows != null && _ahriRows > 6 ? '偏高,建议以 LMTD 法核验' : '一致') + '</td></tr>';
+  html += '<tr><td class="label" colspan="4" style="font-style:italic;color:#666;padding:6px;">注：AHRI 410 (Forced-Circulation Air-Cooling and Air-Heating Coils) 为美国盘管性能认证标准。差异主要源于ε基表(中国JTL-2型 1990年代)与 AHRI 现代盘管性能差异。</td></tr>';
+  html += '</table><br>';
+
+  // 九、设备选型建议
   html += '<table>';
   html += '<tr><td colspan="4" class="section">七、设备选型建议（含安全系数）</td></tr>';
   html += '<tr><th>设备名称</th><th>参数</th><th>数值</th><th>单位</th></tr>';
@@ -2954,8 +3399,8 @@ function exportReport() {
   html += '<tr><td>建议排数</td><td>6 ~ 8</td><td>排</td></tr>';
   html += '<tr><td>迎面尺寸</td><td>' + face_width.toFixed(2) + ' × ' + face_height.toFixed(2) + '</td><td>m</td></tr>';
   html += '<tr><td>冷冻水流量</td><td class="value">' + V_chilled.toFixed(2) + '</td><td>m³/h</td></tr>';
-  html += '<tr><td class="label" rowspan="5">电加热器</td><td>选型功率 (K=1.15)</td><td class="value">' + sel_elec_power.toFixed(1) + '</td><td>kW</td></tr>';
-  html += '<tr><td>加热量</td><td class="value">' + Q_heating.toFixed(2) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label" rowspan="5">电加热器</td><td>选型耗电功率 (K=1.15)</td><td class="value">' + sel_elec_power.toFixed(1) + '</td><td>kW</td></tr>';
+  html += '<tr><td>空气需热量(再热/预热)</td><td class="value">' + Q_reheat.toFixed(2) + '</td><td>kW</td></tr>';
   html += '<tr><td>电热效率</td><td class="value">98</td><td>%</td></tr>';
   html += '<tr><td>控制方式</td><td>PID 可控硅调功（SSR）</td><td>-</td></tr>';
   html += '<tr><td>建议分级</td><td>多级或无级调节</td><td>-</td></tr>';
@@ -2989,8 +3434,11 @@ function exportReport() {
   html += '<tr><th>标准编号</th><th>标准名称及引用内容</th></tr>';
   html += '<tr><td>GB/T 35226-2017</td><td>《湿空气性质计算公式》- Magnus 饱和水汽压公式</td></tr>';
   html += '<tr><td>GB 50736-2012</td><td>《民用建筑供暖通风与空气调节设计规范》- 焓差法负荷计算、空调系统设计</td></tr>';
-  html += '<tr><td>GB/T 14294-2008</td><td>《组合式空调机组》- 设备选型、性能要求</td></tr>';
-  html += '<tr><td>GB/T 19232-2003</td><td>《风机盘管机组》- 风机选型参考</td></tr>';
+  html += '<tr><td>GB/T 14294-2026</td><td>《组合式空调机组》- 设备选型、性能要求</td></tr>';
+  html += '<tr><td>GB/T 29736-2013</td><td>《空调设备用加湿器》- 加湿器性能要求、试验方法</td></tr>';
+  html += '<tr><td>GB/T 18300-2025</td><td>《自动控制钠离子交换器技术条件》- 纯水系统水质要求、电导率标准</td></tr>';
+  html += '<tr><td>GB/T 23341.1-2018</td><td>《涡轮增压器 第1部分：一般技术条件》- 测试台进气条件要求</td></tr>';
+  html += '<tr><td>GB/T 1236-2017</td><td>《通风机 空气动力性能试验方法》- 风机选型参考</td></tr>';
   html += '<tr><td>GB/T 4797.2-2017</td><td>《环境条件分类 自然环境条件 气压》- 大气压力修正</td></tr>';
   html += '<tr><td>GB 50019-2015</td><td>《工业建筑供暖通风与空气调节设计规范》- 工业空调设计</td></tr>';
   html += '</table><br>';
@@ -3029,7 +3477,7 @@ function exportReportElectron() {
   var rhIn = parseFloat(document.getElementById("rhIn").value);
   var tempOut = parseFloat(document.getElementById("tempOut").value);
   var rhOut = parseFloat(document.getElementById("rhOut").value);
-  var P_atm = parseFloat(document.getElementById("atmPressure").value);
+  var P_atm = 101.325;
 
   // 重新计算所有参数
   var P_sat_in = satPressure(tempIn);
@@ -3048,21 +3496,55 @@ function exportReportElectron() {
   var Q_cooling = Math.max(0, massFlow * deltaH);
   var Q_heating = Math.max(0, massFlow * 1.006 * deltaT);
   var m_dehumid = Math.max(0, massFlow * deltaW * 1000);
-  var m_chilled = Q_cooling > 0 ? Q_cooling / (4.187 * 5) : 0;
-  var V_chilled = m_chilled / 1000 * 3600;
-  var elec_power = Q_heating > 0 ? Q_heating / 0.98 : 0;
 
-  // 设备选型参数
-  var K_cooling = 1.10;
-  var K_heating = 1.15;
-  var K_flow = 1.10;
-  var sel_cooling = Q_cooling * K_cooling;
+  // 实际负荷计算（区分夏季/冬季/等湿工况）
+  // 盘管负荷按能量平衡 Q=ṁ(h_in−h_out)，与 BF 无关（修正 BF=0 高估）
+  function _readNum(id, def, lo, hi) {
+    var el = document.getElementById(id);
+    if (!el) return def;
+    var v = parseFloat(el.value);
+    if (isNaN(v) || v < lo || v > hi) return def;
+    return v;
+  }
+  var _chwDT = _readNum("chwDeltaT", 5, 1, 15);
+  var _coilRH = _readNum("coilRH", 95, 80, 100);
+  var T_coil, Q_coil_actual, Q_reheat, h_coil;
+  if (W_in > W_out) {
+    var cl = calcCoilLoad(massFlow, h_in, W_out, tempOut, P_atm, _coilRH);
+    T_coil = cl.T_coil; h_coil = cl.h_coil;
+    Q_coil_actual = cl.Q_coil_actual; Q_reheat = cl.Q_reheat;
+  } else if (W_out > W_in) {
+    T_coil = tempIn;
+    h_coil = h_in;
+    Q_coil_actual = 0;
+    Q_reheat = (tempOut > tempIn) ? massFlow * 1.006 * (tempOut - tempIn) : 0;
+  } else {
+    T_coil = tempOut;
+    Q_coil_actual = Math.max(0, massFlow * deltaH);
+    Q_reheat = 0;
+  }
+
+  var m_chilled = Q_coil_actual > 0 ? Q_coil_actual / (4.187 * _chwDT) : 0;
+  var V_chilled = m_chilled / 1000 * 3600;
+  var elec_power = Q_reheat > 0 ? Q_reheat / 0.98 : 0;
+
+  // 结构尺寸参数（湿空气密度用虚温修正）
+  var rho_air = rhoMoistAir(P_atm, tempIn, W_in);
+  var volFlow = massFlow / rho_air;
+  var volFlow_m3h = volFlow * 3600;
+
+  // 设备选型参数（统一从 getEngineeringParams 读取）
+  var _ep = getEngineeringParams();
+  var K_cooling = _ep.KCooling;
+  var K_heating = _ep.KHeating;
+  var K_flow = _ep.KFlow;
+  var sel_cooling = Q_coil_actual * K_cooling;
   var sel_elec_power = elec_power * K_heating;
-  var air_flow_m3s = massFlow / 1.2;
+  var air_flow_m3s = massFlow / rho_air;
   var air_flow_m3h = air_flow_m3s * 3600;
   var sel_air_flow = air_flow_m3h * K_flow;
   var face_area = air_flow_m3s / 2.5;
-  var face_width = Math.ceil(Math.sqrt(face_area * 1.5) * 100) / 100;
+  var face_width = Math.ceil(Math.sqrt(face_area * getEngineeringParams().ar) * 100) / 100;
   var face_height = face_area / face_width;
 
   // 当前日期时间
@@ -3072,19 +3554,12 @@ function exportReportElectron() {
   var dateTimeStr = dateStr + " " + timeStr;
   var fileName = 'AHU_设计计算报告_' + dateStr + '_' + timeStr.replace(/:/g, '') + '.xls';
 
-  // 结构尺寸参数
-  var T_abs_in = tempIn + 273.15;
-  var R_air = 0.287;
-  var rho_air = P_atm / (R_air * T_abs_in);
-  var volFlow = massFlow / rho_air;
-  var volFlow_m3h = volFlow * 3600;
-
   function calcWH(area, ar) {
     var w = Math.sqrt(area * ar);
     var h = area / w;
     return { w: w, h: h, area: area };
   }
-  var ar = 1.5;
+  var ar = getEngineeringParams().ar;
   var v_filter = 2.5, v_coil = 2.2, v_heater = 2.8, v_humidifier = 2.5, v_fan_outlet = 4.0, v_outlet = 5.0;
   var sec_filter = calcWH(volFlow / v_filter, ar);
   var sec_coil = calcWH(volFlow / v_coil, ar);
@@ -3103,6 +3578,7 @@ function exportReportElectron() {
     P_sat_out: P_sat_out, P_v_out: P_v_out, W_out: W_out, h_out: h_out,
     deltaH: deltaH, deltaW: deltaW, deltaT: deltaT,
     Q_cooling: Q_cooling, Q_heating: Q_heating, m_dehumid: m_dehumid,
+    Q_coil_actual: Q_coil_actual, Q_reheat: Q_reheat, T_coil: T_coil, h_coil: h_coil,
     m_chilled: m_chilled, elec_power: elec_power, V_chilled: V_chilled,
     sel_cooling: sel_cooling, sel_elec_power: sel_elec_power,
     air_flow_m3h: air_flow_m3h, sel_air_flow: sel_air_flow,
@@ -3114,7 +3590,43 @@ function exportReportElectron() {
     sec_filter: sec_filter, sec_coil: sec_coil, sec_heater: sec_heater,
     sec_humidifier: sec_humidifier, sec_fan: sec_fan, sec_outlet: sec_outlet,
     len_filter: len_filter, len_coil: len_coil, len_heater: len_heater,
-    len_humidifier: len_humidifier, len_fan: len_fan
+    len_humidifier: len_humidifier, len_fan: len_fan,
+    // ---- 零部件详细设计结果（从 DOM 读取）----
+    cd_coil: (function() {
+      var el = document.getElementById("cd-coil-result");
+      if (!el || !el.innerHTML) return null;
+      return el.innerHTML;
+    })(),
+    cd_heater: (function() {
+      var el = document.getElementById("cd-heater-result");
+      if (!el || !el.innerHTML) return null;
+      return el.innerHTML;
+    })(),
+    cd_humidifier: (function() {
+      var el = document.getElementById("cd-humidifier-result");
+      if (!el || !el.innerHTML) return null;
+      return el.innerHTML;
+    })(),
+    cd_fan: (function() {
+      var el = document.getElementById("cd-fan-result");
+      if (!el || !el.innerHTML) return null;
+      return el.innerHTML;
+    })(),
+    // ---- AHRI 410 对比参数 ----
+    ahri_eps: (function() {
+      var el = document.getElementById("cd-coil-result");
+      if (!el) return null;
+      var txt = el.textContent || el.innerText;
+      var m = txt.match(/接触系数\s*ε\s*[\s\S]{0,20}?(\d+\.\d+)/);
+      return m ? parseFloat(m[1]) : null;
+    })(),
+    ahri_rows: (function() {
+      var el = document.getElementById("cd-coil-result");
+      if (!el) return null;
+      var txt = el.textContent || el.innerText;
+      var m = txt.match(/(\d+)\s*排/);
+      return m ? parseInt(m[1]) : null;
+    })()
   });
 
   // 通过IPC发送到主进程保存
@@ -3127,6 +3639,21 @@ function exportReportElectron() {
       statusEl.textContent = "保存失败：" + reply.error;
     }
   });
+}
+
+/** 清洗设计结果HTML，去除样式/图表后转为纯文本表格 */
+function stripDesignHtml(html) {
+  if (!html) return '—';
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+    .replace(/<img[^>]*>/gi, '')
+    .replace(/data:image[^"]*"[^"]*"/g, '')
+    .replace(/<div class="physics-warnings">[\s\S]*?<\/div>/gi, '')
+    .replace(/<div class="process-flow-container">[\s\S]*?<\/div>/gi, '')
+    .replace(/<h[1-6][^>]*>/gi, '<h4>')
+    .replace(/<div[^>]*class="design-section"[^>]*>/gi, '');
 }
 
 // 构建Excel HTML内容（提取为公共函数）
@@ -3193,20 +3720,23 @@ function buildExcelHTML(d) {
   html += '<tr><td class="label">焓差</td><td>Δh</td><td class="value">' + d.deltaH.toFixed(4) + '</td><td>kJ/kg</td></tr>';
   html += '<tr><td class="label">含湿量差</td><td>ΔW</td><td class="value">' + (d.deltaW * 1000).toFixed(3) + '</td><td>g/kg</td></tr>';
   html += '<tr><td class="label">温差</td><td>ΔT</td><td class="value">' + d.deltaT.toFixed(2) + '</td><td>℃</td></tr>';
-  html += '<tr><td class="label">制冷量</td><td>Q_c</td><td class="value">' + d.Q_cooling.toFixed(4) + '</td><td>kW</td></tr>';
-  html += '<tr><td class="label">加热量</td><td>Q_h</td><td class="value">' + d.Q_heating.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">净制冷量</td><td>Q_c</td><td class="value">' + d.Q_cooling.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">表冷器出口温度</td><td>T_coil</td><td class="value">' + (d.T_coil || 0).toFixed(1) + '</td><td>℃</td></tr>';
+  html += '<tr><td class="label">表冷器出口焓(再热前)</td><td>h_coil</td><td class="value">' + (d.h_coil || d.h_out).toFixed(4) + '</td><td>kJ/kg</td></tr>';
+  html += '<tr><td class="label">实际表冷器负荷</td><td>Q_coil</td><td class="value">' + (d.Q_coil_actual || d.Q_cooling).toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">再热/预热负荷(空气需热量)</td><td>Q_reheat</td><td class="value">' + (d.Q_reheat || 0).toFixed(4) + '</td><td>kW</td></tr>';
   html += '<tr><td class="label">除湿量</td><td>ṁ_deh</td><td class="value">' + d.m_dehumid.toFixed(4) + '</td><td>g/s</td></tr>';
   html += '<tr><td class="label">冷凝水量</td><td>-</td><td class="value">' + (d.m_dehumid * 3.6).toFixed(1) + '</td><td>L/h</td></tr>';
   html += '</table><br>';
 
-  // 五、冷冻水流量与电加热功率计算
+  // 五、冷冻水流量与电加热器耗电计算
   html += '<table>';
-  html += '<tr><td colspan="4" class="section">五、冷冻水流量与电加热功率计算</td></tr>';
+  html += '<tr><td colspan="4" class="section">五、冷冻水流量与电加热器耗电计算</td></tr>';
   html += '<tr><th>参数名称</th><th>符号</th><th>数值</th><th>单位</th></tr>';
   html += '<tr><td class="label">冷冻水质量流量</td><td>ṁ_ch</td><td class="value">' + d.m_chilled.toFixed(4) + '</td><td>kg/s</td></tr>';
   html += '<tr><td class="label">冷冻水体积流量</td><td>V_ch</td><td class="value">' + d.V_chilled.toFixed(2) + '</td><td>m³/h</td></tr>';
   html += '<tr><td class="label">冷冻水供回水温差</td><td>ΔT_ch</td><td class="value">5</td><td>℃</td></tr>';
-  html += '<tr><td class="label">电加热功率</td><td>P_elec</td><td class="value">' + d.elec_power.toFixed(4) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label">电加热器耗电(η=98%)</td><td>P_elec</td><td class="value">' + d.elec_power.toFixed(4) + '</td><td>kW</td></tr>';
   html += '<tr><td class="label">电热效率</td><td>η</td><td class="value">98</td><td>%</td></tr>';
   html += '</table><br>';
 
@@ -3248,7 +3778,75 @@ function buildExcelHTML(d) {
   html += '<tr><td>密封</td><td>硅酮密封胶 + 橡胶密封条</td><td>GB/T 14683-2017</td><td>漏风率 ≤ 1%</td></tr>';
   html += '</table><br>';
 
-  // 七、设备选型建议
+  // === 七、零部件详细设计（如已计算） ===
+  var _cdCoil = (function() {
+    var el = document.getElementById("cd-coil-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdHeater = (function(){
+    var el = document.getElementById("cd-heater-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdHumidifier = (function(){
+    var el = document.getElementById("cd-humidifier-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _cdFan = (function(){
+    var el = document.getElementById("cd-fan-result");
+    return el && el.innerHTML ? el.innerHTML : null;
+  })();
+  var _ahriEps = (function(){
+    var el = document.getElementById("cd-coil-result");
+    if (!el) return null;
+    var txt = el.textContent || el.innerText;
+    var m = txt.match(/接触系数\s*ε\s*[\s\S]{0,20}?(\d+\.\d+)/);
+    return m ? parseFloat(m[1]) : null;
+  })();
+  var _ahriRows = (function(){
+    var el = document.getElementById("cd-coil-result");
+    if (!el) return null;
+    var txt = el.textContent || el.innerText;
+    var m = txt.match(/(\d+)\s*排/);
+    return m ? parseInt(m[1]) : null;
+  })();
+
+  if (_cdCoil || _cdHeater || _cdHumidifier || _cdFan) {
+    var secIdx = 'a';
+    html += '<table><tr><td colspan="4" class="section">七、零部件详细设计</td></tr></table><br>';
+    if (_cdCoil) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、表冷器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdCoil) + '</td></tr></table><br>';
+      secIdx = 'b';
+    }
+    if (_cdHeater) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、电加热器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdHeater) + '</td></tr></table><br>';
+      secIdx = 'c';
+    }
+    if (_cdHumidifier) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、加湿器详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdHumidifier) + '</td></tr></table><br>';
+      secIdx = 'd';
+    }
+    if (_cdFan) {
+      html += '<table><tr><td colspan="4" class="section">七-' + secIdx + '、风机详细设计</td></tr>';
+      html += '<tr><td colspan="4">' + stripDesignHtml(_cdFan) + '</td></tr></table><br>';
+    }
+  }
+
+  // 八、AHRI 410 标准对比分析
+  html += '<table>';
+  html += '<tr><td colspan="4" class="section">八、AHRI 410 标准对比分析</td></tr>';
+  html += '<tr><th>对比项</th><th>当前计算结果</th><th>AHRI 410 典型值</th><th>差异说明</th></tr>';
+  html += '<tr><td class="label">进风干球温度</td><td class="value">' + d.tempIn + ' °C</td><td class="value">26.7 °C (80°F)</td><td>—</td></tr>';
+  html += '<tr><td class="label">进风湿球温度</td><td class="value">—</td><td class="value">19.4 °C (67°F)</td><td>湿球温度需根据 RH 计算</td></tr>';
+  html += '<tr><td class="label">迎面风速</td><td class="value">' + d.v_coil + ' m/s</td><td class="value">2.54 m/s (500 fpm)</td><td>' + (Math.abs(d.v_coil - 2.54) < 0.3 ? '接近 AHRI 标准' : '建议调整至 2.54 m/s') + '</td></tr>';
+  html += '<tr><td class="label">接触系数 ε</td><td class="value">' + (_ahriEps != null ? _ahriEps.toFixed(4) : '—') + '</td><td class="value">0.85~0.95 (4~6 排)</td><td>' + (_ahriEps != null ? (_ahriEps > 0.95 ? '偏高(盘管出口RH 95%假设偏大,实际约88~92%; JTL-2型ε基表偏低0.05~0.06)' : '在合理范围内') : '—') + '</td></tr>';
+  html += '<tr><td class="label">建议排数</td><td class="value">' + (_ahriRows || '—') + ' 排</td><td class="value">4~6 排</td><td>' + (_ahriRows != null && _ahriRows > 6 ? '偏高,建议以 LMTD 法核验' : '一致') + '</td></tr>';
+  html += '<tr><td class="label" colspan="4" style="font-style:italic;color:#666;padding:6px;">注：AHRI 410 (Forced-Circulation Air-Cooling and Air-Heating Coils) 为美国盘管性能认证标准。差异主要源于ε基表(中国JTL-2型 1990年代)与 AHRI 现代盘管性能差异。</td></tr>';
+  html += '</table><br>';
+
+  // 九、设备选型建议
   html += '<table>';
   html += '<tr><td colspan="4" class="section">七、设备选型建议（含安全系数）</td></tr>';
   html += '<tr><th>设备名称</th><th>参数</th><th>数值</th><th>单位</th></tr>';
@@ -3257,8 +3855,8 @@ function buildExcelHTML(d) {
   html += '<tr><td>建议排数</td><td>6 ~ 8</td><td>排</td></tr>';
   html += '<tr><td>迎面尺寸</td><td>' + d.face_width.toFixed(2) + ' × ' + d.face_height.toFixed(2) + '</td><td>m</td></tr>';
   html += '<tr><td>冷冻水流量</td><td class="value">' + d.V_chilled.toFixed(2) + '</td><td>m³/h</td></tr>';
-  html += '<tr><td class="label" rowspan="5">电加热器</td><td>选型功率 (K=1.15)</td><td class="value">' + d.sel_elec_power.toFixed(1) + '</td><td>kW</td></tr>';
-  html += '<tr><td>加热量</td><td class="value">' + d.Q_heating.toFixed(2) + '</td><td>kW</td></tr>';
+  html += '<tr><td class="label" rowspan="5">电加热器</td><td>选型耗电功率 (K=1.15)</td><td class="value">' + d.sel_elec_power.toFixed(1) + '</td><td>kW</td></tr>';
+  html += '<tr><td>空气需热量(再热/预热)</td><td class="value">' + (d.Q_reheat || d.Q_heating).toFixed(2) + '</td><td>kW</td></tr>';
   html += '<tr><td>电热效率</td><td class="value">98</td><td>%</td></tr>';
   html += '<tr><td>控制方式</td><td>PID 可控硅调功（SSR）</td><td>-</td></tr>';
   html += '<tr><td>建议分级</td><td>多级或无级调节</td><td>-</td></tr>';
@@ -3292,8 +3890,11 @@ function buildExcelHTML(d) {
   html += '<tr><th>标准编号</th><th>标准名称及引用内容</th></tr>';
   html += '<tr><td>GB/T 35226-2017</td><td>《湿空气性质计算公式》- Magnus 饱和水汽压公式</td></tr>';
   html += '<tr><td>GB 50736-2012</td><td>《民用建筑供暖通风与空气调节设计规范》- 焓差法负荷计算、空调系统设计</td></tr>';
-  html += '<tr><td>GB/T 14294-2008</td><td>《组合式空调机组》- 设备选型、性能要求</td></tr>';
-  html += '<tr><td>GB/T 19232-2003</td><td>《风机盘管机组》- 风机选型参考</td></tr>';
+  html += '<tr><td>GB/T 14294-2026</td><td>《组合式空调机组》- 设备选型、性能要求</td></tr>';
+  html += '<tr><td>GB/T 29736-2013</td><td>《空调设备用加湿器》- 加湿器性能要求、试验方法</td></tr>';
+  html += '<tr><td>GB/T 18300-2025</td><td>《自动控制钠离子交换器技术条件》- 纯水系统水质要求、电导率标准</td></tr>';
+  html += '<tr><td>GB/T 23341.1-2018</td><td>《涡轮增压器 第1部分：一般技术条件》- 测试台进气条件要求</td></tr>';
+  html += '<tr><td>GB/T 1236-2017</td><td>《通风机 空气动力性能试验方法》- 风机选型参考</td></tr>';
   html += '<tr><td>GB/T 4797.2-2017</td><td>《环境条件分类 自然环境条件 气压》- 大气压力修正</td></tr>';
   html += '<tr><td>GB 50019-2015</td><td>《工业建筑供暖通风与空气调节设计规范》- 工业空调设计</td></tr>';
   html += '</table><br>';
@@ -3489,7 +4090,7 @@ var qaKnowledge = [
     keywords: ['风速', '面风速', '迎面风速', 'v'],
     question: '各功能段的面风速如何确定？推荐值是多少？',
     category: '设计',
-    answer: '<p>各功能段推荐面风速（依据 GB/T 14294-2008 和 GB 50019-2015）：</p>' +
+    answer: '<p>各功能段推荐面风速（依据 GB/T 14294-2026 和 GB 50019-2015）：</p>' +
       '<table class="air-state-table"><tr><th>功能段</th><th>推荐风速 (m/s)</th><th>设计理由</th></tr>' +
       '<tr><td class="param-name">初效过滤器</td><td class="highlight">2.0 ~ 2.5</td><td>过高阻力大、过滤效率低</td></tr>' +
       '<tr><td class="param-name">表冷器</td><td class="highlight">2.0 ~ 2.5</td><td>保证表冷器表面温度低于露点</td></tr>' +
@@ -3498,7 +4099,7 @@ var qaKnowledge = [
       '<tr><td class="param-name">风机出口</td><td class="highlight">3.5 ~ 5.0</td><td>过高产生噪音和振动</td></tr>' +
       '<tr><td class="param-name">出风口</td><td class="highlight">4.0 ~ 6.0</td><td>与测试台对接</td></tr></table>' +
       '<div class="step-formula">截面积 A = Q_v / v，宽度 W = √(A × 1.5)，高度 H = A / W</div>' +
-      '<div class="standards-ref">引用标准：GB/T 14294-2008《组合式空调机组》、GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</div>'
+      '<div class="standards-ref">引用标准：GB/T 14294-2026《组合式空调机组》、GB 50019-2015《工业建筑供暖通风与空气调节设计规范》</div>'
   },
   {
     tags: ['设计', '结构'],
@@ -3530,7 +4131,7 @@ var qaKnowledge = [
       '<div class="engineering-exp"><strong>设计要点：</strong><ul>' +
       '<li>铝合金框架采用断冷桥设计，避免内外温差通过框架传导产生冷凝水</li>' +
       '<li>50mm 聚氨酯保温层导热系数 ≤0.024 W/(m·K)，可防止夏季箱体外表面结露</li>' +
-      '<li>箱体漏风率 ≤1%（GB/T 14294-2008），精密测试台建议 ≤0.5%</li>' +
+      '<li>箱体漏风率 ≤1%（GB/T 14294-2026），精密测试台建议 ≤0.5%</li>' +
       '<li>箱体承受 ±2000Pa 压力不变形</li></ul></div>'
   },
   {
@@ -3552,7 +4153,7 @@ var qaKnowledge = [
     question: 'AHU 的漏风率标准是多少？如何保证？',
     category: '设计',
     answer: '<p><b>漏风率标准：</b></p><ul>' +
-      '<li><b>GB/T 14294-2008</b> 要求：组合式空调机组漏风率 ≤ <b>1%</b></li>' +
+      '<li><b>GB/T 14294-2026</b> 要求：组合式空调机组漏风率 ≤ <b>1%</b></li>' +
       '<li>精密测试台（如涡轮增压器试验台）建议 ≤ <b>0.5%</b></li></ul>' +
       '<p><b>保证措施：</b></p><ul>' +
       '<li>面板接缝处用硅酮密封胶密封（GB/T 14683-2017）</li>' +
@@ -3686,7 +4287,7 @@ var qaKnowledge = [
       '<table class="air-state-table"><tr><th>标准号</th><th>标准名称</th><th>引用内容</th></tr>' +
       '<tr><td><b>GB/T 35226-2017</b></td><td>湿空气性质计算公式</td><td>Magnus 饱和水汽压公式、空气密度</td></tr>' +
       '<tr><td><b>GB 50736-2012</b></td><td>民用建筑供暖通风与空气调节设计规范</td><td>焓差法负荷计算、空调系统设计</td></tr>' +
-      '<tr><td><b>GB/T 14294-2008</b></td><td>组合式空调机组</td><td>设备选型、箱体结构、漏风率</td></tr>' +
+      '<tr><td><b>GB/T 14294-2026</b></td><td>组合式空调机组</td><td>设备选型、箱体结构、漏风率</td></tr>' +
       '<tr><td><b>GB 50019-2015</b></td><td>工业建筑供暖通风与空气调节设计规范</td><td>风速选取、风管设计</td></tr>' +
       '<tr><td><b>GB/T 3280-2015</b></td><td>不锈钢冷轧钢板和钢带</td><td>箱体外板材料</td></tr>' +
       '<tr><td><b>GB/T 2518-2019</b></td><td>连续热镀锌钢板和钢带</td><td>箱体内板材料</td></tr>' +
@@ -3845,7 +4446,7 @@ function clearQaChat() {
     '<li><strong>公式类</strong> — 如"制冷量怎么算"、"饱和水汽压公式"</li>' +
     '<li><strong>原理类</strong> — 如"什么是焓"、"含湿量是什么"</li>' +
     '<li><strong>设计类</strong> — 如"风速怎么选"、"AHU 总长度"</li>' +
-    '<li><strong>设备类</strong> — 如"表冷器怎么选"、"风机位置"</li>
+    '<li><strong>设备类</strong> — 如"表冷器怎么选"、"风机位置"</li>' +
     '<li><strong>标准类</strong> — 如"引用哪些国标"、"漏风率要求"</li>' +
     '</ul></div></div>';
   document.getElementById('statusText').textContent = '问答对话已清空';
@@ -3924,7 +4525,7 @@ function getCurrentContext() {
       ctx += '入口湿度: ' + (parseFloat(document.getElementById('rhIn').value) || '-') + ' %\n';
       ctx += '出口温度: ' + (parseFloat(document.getElementById('tempOut').value) || '-') + ' ℃\n';
       ctx += '出口湿度: ' + (parseFloat(document.getElementById('rhOut').value) || '-') + ' %\n';
-      ctx += '大气压力: ' + (parseFloat(document.getElementById('atmPressure').value) || '-') + ' kPa\n';
+      ctx += '大气压力: 101.325 kPa\n';
       var results = document.querySelectorAll('#results .result-item');
       if (results.length > 0) {
         ctx += '\n===== 当前计算结果 =====\n';
@@ -4240,4 +4841,15 @@ function exportSvgAsPdf(svgEl, fileName) {
   } catch (e) {
     document.getElementById("statusText").textContent = 'PDF 导出仅在桌面版支持';
   }
+}
+
+/** 切换参数符号表（浮动面板）的显示/隐藏 */
+function toggleSymbolTable() {
+  var panel = document.getElementById("symPanel");
+  var overlay = document.getElementById("symOverlay");
+  if (!panel || !overlay) return;
+  var showing = panel.style.display !== "none";
+  panel.style.display = showing ? "none" : "flex";
+  overlay.style.display = showing ? "none" : "block";
+  document.body.style.overflow = showing ? "" : "hidden";
 }

@@ -94,7 +94,7 @@ header h1 {
 /* ========== 双列布局 ========== */
 main.two-col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 20px;
   padding: 25px;
 }
@@ -105,6 +105,68 @@ main.two-col {
   border-radius: 8px;
   padding: 20px;
   border: 1px solid #e2e8f0;
+}
+
+/* ========== 输入面板头部（标题+预设按钮行） ========== */
+.input-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.input-header-row h2 {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* ========== 参数卡片布局 ========== */
+.param-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.param-card-row {
+  display: flex;
+  gap: 10px;
+}
+.param-card {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.param-card-full {
+  width: 100%;
+}
+.param-card-header {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2b6cb0;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.card-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.card-grid-2 .form-group {
+  margin: 0;
+}
+.card-grid-2 .form-group label {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.card-grid-2 .form-group input {
+  height: 34px;
+  font-size: 0.9rem;
+}
+.card-grid-2 .range-hint {
+  font-size: 0.72rem;
 }
 
 .input-panel h2,
@@ -137,7 +199,7 @@ main.two-col {
   transition: border-color 0.3s;
 }
 
-.form-group input:focus {
+.form-group input:focus-visible {
   outline: none;
   border-color: #2b6cb0;
   box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.15);
@@ -166,25 +228,74 @@ button {
   transition: all 0.3s;
 }
 
+.param-text-box {
+  margin-top: 16px;
+}
+.param-text-label {
+  display: block;
+  font-size: 0.85rem;
+  color: #4a5568;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.param-textarea {
+  width: 100%;
+  height: 120px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.82rem;
+  color: #2d3748;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+  resize: none;
+  outline: none;
+  cursor: text;
+  box-sizing: border-box;
+}
+.param-textarea:focus {
+  border-color: #4299e1;
+  background: #fff;
+}
+
 #calcBtn {
   background: linear-gradient(135deg, #2b6cb0 0%, #2c5282 100%);
   color: white;
-  flex: 2;
+  flex: 3;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 #calcBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(43, 108, 176, 0.4);
+  box-shadow: 0 6px 18px rgba(43, 108, 176, 0.45);
 }
 
 #resetBtn {
-  background: #e2e8f0;
-  color: #4a5568;
+  background: transparent;
+  color: #718096;
+  border: 1px solid #cbd5e0;
   flex: 1;
+  font-size: 0.85rem;
 }
 
 #resetBtn:hover {
-  background: #cbd5e0;
+  background: #f7fafc;
+  border-color: #a0aec0;
+  color: #4a5568;
+}
+
+/* 统一 ghost 按钮风格（预设/工具栏/极值/QA 等次级操作） */
+.btn-ghost, .toolbar-btn, .extreme-btn-secondary, .qa-clear-btn, .qa-export-btn, .qa-import-btn {
+  background: transparent;
+  color: #4a5568;
+  border: 1px solid #cbd5e0;
+}
+.btn-ghost:hover, .toolbar-btn:hover, .extreme-btn-secondary:hover,
+.qa-clear-btn:hover, .qa-export-btn:hover, .qa-import-btn:hover {
+  background: #edf2f7;
+  border-color: #a0aec0;
 }
 
 /* ========== 输出面板 ========== */
@@ -236,11 +347,122 @@ button {
   font-weight: 600;
   color: #2d3748;
   font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .result-value.cooling { color: #2b6cb0; }
 .result-value.heating { color: #c53030; }
 .result-value.dehumidify { color: #276749; }
+
+/* 结果值后的副标注(小字说明) */
+.result-sub {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #718096;
+  margin-left: 6px;
+}
+
+/* 首屏关键负荷数字放大（便于投影/远距阅读） */
+.result-item:first-child .result-value,
+.result-item:nth-child(3) .result-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+/* 折叠分节头部 */
+.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+}
+.collapsible-header:hover { color: #2b6cb0; }
+
+/* ========== 工况判定横幅 ========== */
+.mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.mode-banner .mode-banner-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+.mode-banner .mode-banner-text { font-size: 1rem; }
+.mode-banner.mode-cooling { background: #ebf8ff; color: #2c5282; border-left: 4px solid #2b6cb0; }
+.mode-banner.mode-heating { background: #fff5f5; color: #c53030; border-left: 4px solid #c53030; }
+.mode-banner.mode-mixed   { background: #fffaf0; color: #c05621; border-left: 4px solid #dd6b20; }
+
+/* ========== 物理合理性警告 ========== */
+.physics-warnings {
+  background: #fffbeb;
+  border: 1px solid #f6e05e;
+  border-left: 4px solid #d69e2e;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  color: #744210;
+  font-size: 0.85rem;
+}
+.physics-warnings ul { margin: 4px 0 0 18px; padding: 0; }
+.physics-warnings li { margin-bottom: 2px; }
+
+/* ========== 输入校验无效状态 ========== */
+.form-group input.invalid,
+.extreme-input-row input.invalid,
+.advanced-params input.invalid {
+  border-color: #e53e3e !important;
+  background: #fff5f5;
+  box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.15) !important;
+}
+
+/* ========== 高级参数面板 ========== */
+.advanced-params-toggle { margin: 8px 0 4px; }
+.advanced-toggle-btn {
+  background: none; border: none; color: #2b6cb0;
+  font-size: 0.82rem; cursor: pointer; padding: 4px 0;
+}
+.advanced-toggle-btn:hover { text-decoration: underline; }
+.advanced-params { padding-top: 6px; border-top: 1px dashed #e2e8f0; margin-top: 6px; }
+
+/* ========== 高级参数子分组（迎面风速/安全系数） ========== */
+.adv-param-group { margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf2f7; }
+.adv-param-group-title {
+  font-size: 0.82rem; font-weight: 600; color: #4a5568;
+  margin-bottom: 8px; padding-left: 2px;
+}
+.adv-param-grid-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+}
+.adv-param-grid-4 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;
+}
+.adv-param-grid-3 .form-group, .adv-param-grid-4 .form-group {
+  margin: 0;
+}
+.adv-param-grid-3 .form-group label, .adv-param-grid-4 .form-group label {
+  font-size: 0.78rem; font-weight: 500;
+}
+.adv-param-grid-3 .form-group input, .adv-param-grid-4 .form-group input {
+  height: 32px; font-size: 0.85rem;
+}
+.adv-param-grid-3 .range-hint, .adv-param-grid-4 .range-hint {
+  font-size: 0.68rem;
+}
+@media (max-width: 900px) {
+  .adv-param-grid-3, .adv-param-grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ========== 预设按钮激活态 ========== */
+.preset-btn.preset-active {
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(43, 108, 176, 0.4);
+}
 
 /* ========== 详细计算过程 ========== */
 .calc-process {
@@ -602,9 +824,11 @@ button {
   color: #4a5568;
   border-bottom: 1px solid #e2e8f0;
   vertical-align: top;
+  font-variant-numeric: tabular-nums;
 }
+.brand-table tbody tr:nth-child(even) { background: #f7fafc; }
 .brand-table tbody tr:hover {
-  background: #f7fafc;
+  background: #edf2f7;
 }
 .brand-table tbody tr:last-child td {
   border-bottom: none;
@@ -875,6 +1099,8 @@ button {
   color: #718096;
   border-top: 1px solid #e2e8f0;
 }
+.status-bar.warn  { background: #fffbeb; color: #744210; }
+.status-bar.error { background: #fff5f5; color: #c53030; }
 
 /* ========== 响应式 ========== */
 @media (max-width: 900px) {
@@ -889,6 +1115,16 @@ button {
   }
   .selection-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .param-card-row {
+    flex-direction: column;
+  }
+  .input-header-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }/* ===========================
    Tutorial / 教学翻页模式
@@ -1427,19 +1663,8 @@ button {
 .preset-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  background: #f7fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  gap: 6px;
   flex-wrap: wrap;
-}
-.preset-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #4a5568;
-  white-space: nowrap;
 }
 .preset-btn {
   padding: 6px 14px;
@@ -1547,6 +1772,7 @@ button {
   border: 1px solid #e2e8f0;
   color: #4a5568;
   font-size: 0.81rem;
+  font-variant-numeric: tabular-nums;
 }
 .air-state-table td.param-name {
   text-align: left;
@@ -1556,6 +1782,14 @@ button {
 }
 .air-state-table td.highlight {
   color: #2b6cb0;
+  font-weight: 600;
+}
+.air-state-table tr.inlet td {
+  background: #ebf8ff;
+  font-weight: 600;
+}
+.air-state-table tr.outlet td {
+  background: #f0fff4;
   font-weight: 600;
 }
 
@@ -1624,6 +1858,39 @@ button {
   padding-bottom: 6px;
   border-bottom: 1px solid #e2e8f0;
 }
+.verify-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.82rem;
+}
+.verify-table th {
+  background: #edf2f7;
+  color: #2d3748;
+  padding: 6px 10px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+.verify-table td {
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+.verify-table td:first-child {
+  text-align: left;
+  font-weight: 500;
+  background: #f7fafc;
+}
+.verify-verdict {
+  background: #fffbeb;
+  border-left: 3px solid #d69e2e;
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.6;
+}
 .physics-def {
   background: #ebf8ff;
   border-left: 3px solid #4299e1;
@@ -1659,6 +1926,117 @@ button {
 }
 .engineering-exp li {
   margin-bottom: 4px;
+}
+
+/* ========== 参数符号表（浮动面板） ========== */
+.sym-btn {
+  background: #5a6a8a !important;
+  margin-left: auto;
+  font-size: 0.82rem;
+  border-radius: 6px;
+  padding: 7px 14px;
+}
+.sym-btn:hover {
+  background: #4a5a7a !important;
+}
+
+.sym-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 999;
+}
+
+.sym-panel {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 820px;
+  max-width: 92vw;
+  max-height: 82vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sym-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #1a2a4a;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sym-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.sym-close:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.sym-panel-body {
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sym-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.sym-table th {
+  background: #f0f4f8;
+  color: #1a2a4a;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #d0d8e0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.sym-table th:first-child { width: 90px; }
+.sym-table th:nth-child(2) { width: 180px; }
+.sym-table th:nth-child(3) { width: 90px; }
+
+.sym-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e8ecf0;
+  vertical-align: top;
+}
+
+.sym-table tr:hover td {
+  background: #f5f8fc;
+}
+
+.sym-group td {
+  background: #1a2a4a !important;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 7px 12px;
+}
+
+.sym-table tr.sym-group:hover td {
+  background: #1a2a4a !important;
 }
 
 /* 打印样式 */
@@ -1743,6 +2121,25 @@ button {
   color: #4a5568;
   flex-wrap: wrap;
 }
+/* ========== 焓湿图 SVG ========== */
+.psychro-svg {
+  width: 100%;
+  max-width: 700px;
+  height: auto;
+  background: #fafcfc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+}
+.psychro-svg circle { cursor: pointer; }
+.psychro-svg circle:hover { filter: drop-shadow(0 0 3px rgba(43,108,176,0.5)); }
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 4px;
+}
+.chart-hint { font-size: 0.78rem; color: #718096; }
+.chart-export-btn { padding: 4px 10px; font-size: 0.8rem; }
 .legend-dot {
   display: inline-block;
   width: 10px;
@@ -2038,4 +2435,436 @@ button {
 .qa-import-btn:hover {
   background: #fefcbf;
   border-color: #ecc94b;
+}
+
+/* ============================================
+   极值分析样式
+   ============================================ */
+   
+/* ---- 零部件设计 ---- */
+.design-tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.design-tab-btn {
+  padding: 8px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f7fafc;
+  color: #4a5568;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.design-tab-btn.active {
+  background: #3182ce;
+  color: #fff;
+  border-color: #3182ce;
+}
+.design-tab-btn:hover:not(.active) {
+  background: #edf2f7;
+}
+.design-content {
+  min-height: 200px;
+}
+.design-params-section {
+  margin-top: 14px;
+  padding: 12px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+.design-params-section .form-group {
+  margin-bottom: 6px;
+}
+.design-params-section .form-group label {
+  font-size: 0.82rem;
+}
+.design-params-section .form-group input {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.design-report {
+  width: 100%;
+}
+.design-report h4 {
+  margin: 0 0 14px 0;
+  font-size: 1.05rem;
+  color: #2d3748;
+}
+.design-section {
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.design-section h5 {
+  margin: 0;
+  padding: 8px 12px;
+  background: #f7fafc;
+  font-size: 0.85rem;
+  color: #2b6cb0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.design-section .air-state-table {
+  margin: 0;
+  border: none;
+}
+.design-section .air-state-table td {
+  font-size: 0.82rem;
+  padding: 5px 10px;
+}
+
+/* ---- 整体布局 ---- */
+.extreme-layout {
+  padding: 16px 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ---- 输入参数栏（水平排列） ---- */
+.extreme-input-bar {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.extreme-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+.extreme-input-item {
+  flex: 1;
+  min-width: 130px;
+}
+.extreme-input-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 4px;
+}
+.extreme-input-item .range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.extreme-input-item .range-inputs input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  width: 60px;
+}
+.extreme-input-item .range-inputs input:focus {
+  border-color: #4299e1;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.15);
+}
+.range-sep {
+  color: #718096;
+  font-size: 0.85rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.extreme-input-btns {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 200px;
+  flex: 0 0 auto;
+}
+.extreme-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 5px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.extreme-btn {
+  background: #3182ce;
+  color: #fff;
+}
+.extreme-btn:hover {
+  background: #2b6cb0;
+}
+.extreme-btn-secondary {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+.extreme-btn-secondary:hover {
+  background: #cbd5e0;
+}
+.extreme-progress {
+  margin-top: 10px;
+}
+
+/* ---- 结果区域 ---- */
+.extreme-results-title {
+  font-size: 1.1rem;
+  margin: 0 0 14px 0;
+  color: #2d3748;
+}
+.extreme-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  max-width: 900px;
+}
+
+/* ---- 结果卡片 ---- */
+.extreme-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+}
+.extreme-card h4 {
+  margin: 0 0 10px 0;
+  font-size: 1rem;
+  color: #2d3748;
+}
+.extreme-sel {
+  margin-bottom: 4px;
+  font-size: 0.92rem;
+}
+.extreme-sel-label {
+  color: #4a5568;
+}
+.extreme-sel-value {
+  color: #e53e3e;
+  font-weight: 700;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.extreme-sel-row {
+  line-height: 1.8;
+}
+.extreme-sel-raw {
+  color: #2b6cb0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.extreme-sel-note {
+  color: #a0aec0;
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+/* ========== 零部件设计 - 工况范围输入 ========== */
+.design-range-section {
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px dashed #e2e8f0;
+}
+.range-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.range-item label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 3px;
+}
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.range-inputs input {
+  width: 100%;
+  height: 32px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.range-sep {
+  font-size: 0.85rem;
+  color: #a0aec0;
+  flex-shrink: 0;
+}
+@media (max-width: 900px) {
+  .range-grid { grid-template-columns: 1fr 1fr; }
+}
+/* 边界扫描结果表格 */
+.boundary-report h4 { color: #2b6cb0; margin: 0 0 8px; }
+.boundary-report table { width: 100%; font-size: 0.85rem; }
+.boundary-report th { background: #edf2f7; padding: 6px 8px; text-align: center; }
+.boundary-report td { padding: 5px 8px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+.extreme-cond {
+  font-size: 0.83rem;
+  color: #718096;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: #f7fafc;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.extreme-card .extreme-canvas {
+  width: 100%;
+  height: 260px;
+  display: block;
+  margin: 6px 0 10px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fafcfc;
+}
+.extreme-desc {
+  font-size: 0.82rem;
+  color: #718096;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* ---- 计算过程详情 ---- */
+.detail-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 12px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  color: #4a5568;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+  font-weight: 500;
+}
+.detail-toggle:hover {
+  background: #edf2f7;
+}
+.extreme-detail {
+  margin-top: 8px;
+}
+.extreme-detail .air-state-table td {
+  font-size: 0.82rem;
+  padding: 5px 10px;
+}
+
+/* ---- 纯水系统/结构尺寸卡片 ---- */
+.extreme-card table.air-state-table {
+  margin-bottom: 8px;
+}
+
+/* ---- 响应式 ---- */
+@media (max-width: 1100px) {
+  .extreme-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 800px) {
+  .extreme-input-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .extreme-input-item {
+    min-width: 0;
+  }
+  .extreme-input-item .range-inputs input {
+    width: auto;
+  }
+  .extreme-input-btns {
+    flex-direction: row;
+  }
+}
+
+/* ---- 工程参数设定 ---- */
+.extreme-params-toggle {
+  cursor: pointer;
+  padding: 10px 16px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin: 0 auto 12px;
+  max-width: 900px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #2d3748;
+  user-select: none;
+  transition: background 0.2s;
+}
+.extreme-params-toggle:hover {
+  background: #edf2f7;
+}
+.extreme-params-panel {
+  max-width: 900px;
+  margin: 0 auto 18px;
+  padding: 16px 20px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.extreme-params-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.extreme-params-group {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.extreme-params-group h5 {
+  margin: 0 0 10px 0;
+  font-size: 0.88rem;
+  color: #2b6cb0;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+.extreme-param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+.extreme-param-row label {
+  min-width: 90px;
+  color: #4a5568;
+  font-weight: 500;
+}
+.extreme-param-row input {
+  width: 70px;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  text-align: center;
+  outline: none;
+}
+.extreme-param-row input:focus {
+  border-color: #4299e1;
+  box-shadow: 0 0 0 2px rgba(66,153,225,0.15);
+}
+.ep-range {
+  font-size: 0.75rem;
+  color: #a0aec0;
+}
+
+@media (max-width: 800px) {
+  .extreme-params-grid {
+    grid-template-columns: 1fr;
+  }
 }

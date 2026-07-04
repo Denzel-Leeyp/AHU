@@ -13,26 +13,25 @@
       <p class="subtitle">完整设计流程 · 参数计算 · 设备选型指导 · 控制精度：温度±0.5℃ / 湿度±3% · v2.0</p>
     </header>
     <div class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab('calc')">参数计算</button>
-      <button class="tab-btn" onclick="switchTab('guide')">设计指南</button>
-      <button class="tab-btn" onclick="switchTab('knowledge')">知识库</button>
-      <button class="tab-btn" onclick="switchTab('selection')">设备选型建议</button>
-      <button class="tab-btn" onclick="switchTab('qa')">💬 在线问答</button>
+      <button class="tab-btn active" data-tab="calc" onclick="switchTab('calc')">参数计算</button>
+      <button class="tab-btn" data-tab="guide" onclick="switchTab('guide')">设计指南</button>
+      <button class="tab-btn" data-tab="knowledge" onclick="switchTab('knowledge')">知识库</button>
+      <button class="tab-btn" data-tab="selection" onclick="switchTab('selection')">设备选型建议</button>
+      <button class="tab-btn" data-tab="qa" onclick="switchTab('qa')">在线问答</button>
+      <button class="tab-btn" data-tab="design" onclick="switchTab('design')">零部件设计</button>
+      <button class="tab-btn sym-btn" onclick="toggleSymbolTable()">📖 参数符号</button>
     </div>
     <div id="tab-calc" class="tab-content active">
       <main class="two-col">
         <section class="input-panel">
-          <h2>输入参数</h2>
-
-          <!-- 工况预设按钮 -->
-          <div class="preset-group">
-            <span class="preset-label">快速预设：</span>
-            <button class="preset-btn summer" onclick="setPreset('summer')" title="夏季极端工况：40℃ / 95% RH">☀ 夏季极端</button>
-            <button class="preset-btn winter" onclick="setPreset('winter')" title="冬季极端工况：-5℃ / 10% RH">❄ 冬季极端</button>
-            <button class="preset-btn standard" onclick="setPreset('standard')" title="标准测试工况：25℃ / 60% RH">📐 标准工况</button>
+          <div class="input-header-row">
+            <h2>输入参数</h2>
+            <div class="preset-group">
+              <button class="preset-btn summer" onclick="setPreset('summer', event)" title="夏季极端工况：40℃ / 95% RH">☀ 夏季极端</button>
+              <button class="preset-btn winter" onclick="setPreset('winter', event)" title="冬季极端工况：-5℃ / 10% RH">❄ 冬季极端</button>
+              <button class="preset-btn standard" onclick="setPreset('standard', event)" title="标准测试工况：25℃ / 60% RH">📐 标准工况</button>
+            </div>
           </div>
-
-          <!-- 实时计算开关 -->
           <div class="auto-calc-toggle">
             <label class="toggle-label">
               <input type="checkbox" id="autoCalc" onchange="toggleAutoCalc()">
@@ -40,58 +39,120 @@
             </label>
             <span class="toggle-hint">开启后输入参数变化时自动重新计算</span>
           </div>
-
-          <div class="form-group">
-            <label for="massFlow">
-              空气质量流量 (kg/s)
-              <span class="info-icon" title="空气质量流量：每秒通过空调系统的干空气质量。&#10;这是空调系统设计最核心的参数之一，决定了所有设备（表冷器、加热器、风机）的容量。&#10;&#10;换算关系：体积流量 (m³/h) ≈ 质量流量 (kg/s) × 3000&#10;（空气密度取 1.2 kg/m³）">?</span>
-            </label>
-            <input type="number" id="massFlow" min="0.1" max="1.1" step="0.01" value="0.5" oninput="onParamChange()">
-            <span class="range-hint">范围：0.1 ~ 1.1 kg/s（对应约 300~3300 m³/h @ 1.2 kg/m³）</span>
-          </div>
-          <div class="form-group">
-            <label for="tempIn">
-              入口空气温度 (℃)
-              <span class="info-icon" title="入口空气温度：空调系统进口处空气的干球温度。&#10;&#10;设计范围 -5℃ ~ 40℃，覆盖中国大部分地区极端气候条件：&#10;• 夏季极端：40℃（如吐鲁番、重庆）&#10;• 冬季极端：-5℃（如哈尔滨、长春）&#10;&#10;该参数直接影响制冷/加热负荷的大小。">?</span>
-            </label>
-            <input type="number" id="tempIn" min="-5" max="40" step="0.5" value="35" oninput="onParamChange()">
-            <span class="range-hint">范围：-5 ~ 40 ℃（覆盖中国大部分地区极端温度）</span>
-          </div>
-          <div class="form-group">
-            <label for="rhIn">
-              入口相对湿度 (%)
-              <span class="info-icon" title="入口相对湿度：空气中水蒸气分压力与同温度下饱和水蒸气分压力之比。&#10;&#10;RH 越高，空气含湿量越大，除湿负荷越大。&#10;• 夏季高温高湿：80%~95% RH（沿海地区）&#10;• 冬季低温低湿：10%~30% RH（北方干燥地区）&#10;&#10;参考 GB 50736-2012《民用建筑供暖通风与空气调节设计规范》">?</span>
-            </label>
-            <input type="number" id="rhIn" min="10" max="95" step="1" value="80" oninput="onParamChange()">
-            <span class="range-hint">范围：10 ~ 95%</span>
-          </div>
-          <div class="form-group">
-            <label for="tempOut">
-              出口空气温度 (℃)
-              <span class="info-icon" title="出口空气温度：经过空调处理后送入测试台的空气温度。&#10;&#10;涡轮增压器测试标准通常要求进气温度为 20℃ ±5℃。&#10;• 推荐设定值：20℃&#10;• 可调范围：15 ~ 25℃&#10;&#10;参考 GB/T 23341.1-2018《涡轮增压器 第1部分：一般技术条件》">?</span>
-            </label>
-            <input type="number" id="tempOut" min="15" max="25" step="0.5" value="20" oninput="onParamChange()">
-            <span class="range-hint">目标范围：15 ~ 25 ℃（推荐 20℃）</span>
-          </div>
-          <div class="form-group">
-            <label for="rhOut">
-              出口相对湿度 (%)
-              <span class="info-icon" title="出口相对湿度：处理后空气的目标湿度。&#10;&#10;• 推荐设定值：50% RH（标准测试条件）&#10;• 可调范围：30% ~ 70% RH&#10;&#10;湿度过低 → 静电风险增加&#10;湿度过高 → 设备腐蚀、结露风险&#10;&#10;参考 GB/T 2423.3-2016《环境试验 第2部分：试验方法 试验Cab：恒定湿热试验》">?</span>
-            </label>
-            <input type="number" id="rhOut" min="30" max="70" step="1" value="50" oninput="onParamChange()">
-            <span class="range-hint">目标范围：30 ~ 70%（推荐 50%）</span>
-          </div>
-          <div class="form-group">
-            <label for="atmPressure">
-              大气压力 (kPa)
-              <span class="info-icon" title="大气压力：空调系统所在地的大气压力。&#10;&#10;标准海平面大气压：101.325 kPa&#10;&#10;海拔修正参考：&#10;• 海拔 0m → 101.325 kPa&#10;• 海拔 500m → 95.5 kPa&#10;• 海拔 1000m → 89.9 kPa&#10;• 海拔 1500m → 84.6 kPa&#10;• 海拔 2000m → 79.5 kPa&#10;&#10;高原地区大气压力降低，空气密度减小，&#10;影响风机选型和换热计算。&#10;&#10;参考 GB/T 4797.2-2017《环境条件分类 自然环境条件 气压》">?</span>
-            </label>
-            <input type="number" id="atmPressure" min="80" max="110" step="0.001" value="101.325" oninput="onParamChange()">
-            <span class="range-hint">标准大气压 101.325 kPa，高原地区需修正</span>
+          <div class="param-cards">
+            <div class="param-card-row">
+              <div class="param-card">
+                <div class="param-card-header">进口空气状态</div>
+                <div class="card-grid-2">
+                  <div class="form-group">
+                    <label for="tempIn">入口温度 (℃)</label>
+                    <input type="number" id="tempIn" min="-5" max="40" step="0.5" value="35" oninput="onParamChange();syncToDesign()">
+                    <span class="range-hint">-5 ~ 40 ℃</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="rhIn">入口相对湿度 (%)</label>
+                    <input type="number" id="rhIn" min="10" max="95" step="1" value="80" oninput="onParamChange();syncToDesign()">
+                    <span class="range-hint">10 ~ 95%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="param-card">
+                <div class="param-card-header">出口空气状态</div>
+                <div class="card-grid-2">
+                  <div class="form-group">
+                    <label for="tempOut">出口温度 (℃)</label>
+                    <input type="number" id="tempOut" min="15" max="25" step="0.5" value="20" oninput="onParamChange();syncToDesign()">
+                    <span class="range-hint">15 ~ 25 ℃（推荐 20）</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="rhOut">出口相对湿度 (%)</label>
+                    <input type="number" id="rhOut" min="30" max="70" step="1" value="50" oninput="onParamChange();syncToDesign()">
+                    <span class="range-hint">30 ~ 70%（推荐 50）</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="param-card param-card-full">
+              <div class="param-card-header">系统参数</div>
+              <div class="card-grid-2">
+                <div class="form-group">
+                  <label for="massFlow">空气质量流量 (kg/s)</label>
+                  <input type="number" id="massFlow" min="0.1" max="1.1" step="0.01" value="0.5" oninput="onParamChange();syncToDesign()">
+                  <span class="range-hint">0.1 ~ 1.1 kg/s</span>
+                </div>
+                <div class="form-group" style="display:none;">
+                  <label>大气压力</label>
+                  <input type="number" value="101.325" readonly>
+                </div>
+              </div>
+            </div>
+          <div id="advancedParams" class="advanced-params">
+            <div class="form-group">
+              <label for="bypassFactor">
+                盘管旁通系数 BF
+                <span class="info-icon" title="盘管旁通系数 Bypass Factor：表征空气与盘管接触完善程度。&#10;BF=0 表示完全接触（理想），BF=1 表示完全不换热。&#10;真实 AHU 表冷器 BF≈0.1~0.3（GB/T 14294）。&#10;&#10;影响：&#10;• 盘管负荷按能量平衡 Q=ṁ(h_in−h_out) 计算，与 BF 无关&#10;• BF 仅影响 ADP（机器露点）与冷冻水出水温度选择&#10;• BF 越大，ADP 需越低才能达到同样出口状态">?</span>
+              </label>
+              <input type="number" id="bypassFactor" min="0" max="0.5" step="0.01" value="0.15" oninput="onParamChange()">
+              <span class="range-hint">推荐 0.10~0.30（默认 0.15）</span>
+            </div>
+            <div class="form-group">
+              <label for="coilRH">
+                盘管出口相对湿度（再热前, %）
+                <span class="info-icon" title="表冷器出口空气的相对湿度（再热前，又称机器露点ADP）。&#10;盘管出口空气接近饱和，通常取 90%~95%。&#10;该值越高（越接近100%），说明盘管与空气的接触越充分。&#10;&#10;【重要】此参数直接决定表冷器出口干球温度 T_coil：&#10;出口含湿量不变时，RH越高→P_sat越低→T_coil越低。&#10;一般不要改动，保持 95% 即可。">?</span>
+              </label>
+              <input type="number" id="coilRH" min="85" max="99" step="1" value="95" oninput="onParamChange();syncToDesign()">
+              <span class="range-hint">推荐 90~99（默认 95）</span>
+            </div>
+            <div class="form-group">
+              <label for="chwDeltaT">
+                冷冻水温差 (℃)
+                <span class="info-icon" title="冷冻水供回水温差：决定冷冻水流量 m=Q/(Cp·ΔT)。&#10;• 标准 5℃&#10;• 大温差系统：7~10℃（节能但盘管换热面积需增大）&#10;• 涡轮增压器测试台常用 5~7℃">?</span>
+              </label>
+              <input type="number" id="chwDeltaT" min="3" max="10" step="0.5" value="5" oninput="onParamChange();syncToDesign()">
+              <span class="range-hint">标准 5℃（示例：供水7℃→回水12℃）</span>
+            </div>
+            <div class="form-group">
+              <label for="chwSupply">
+                冷冻水供水温度 (℃)
+                <span class="info-icon" title="进入表冷器的冷冻水温度。&#10;• 空调系统标准 7℃&#10;• 深冷系统可低至 4~5℃&#10;• 工业冷却水可能 10~12℃&#10;盘管出口空气温度必须高于此值+逼近温度(约2.5℃)才能正常换热。">?</span>
+              </label>
+              <input type="number" id="chwSupply" min="1" max="15" step="0.5" value="7" oninput="onParamChange();syncToDesign()">
+              <span class="range-hint">标准 7℃（常用 5~10℃）</span>
+            </div>
+            <div class="adv-param-group">
+              <div class="adv-param-group-title">迎面风速 (m/s)</div>
+              <div class="adv-param-grid-3">
+                <div class="form-group"><label for="adv-vFilter">过滤器段</label><input type="number" id="adv-vFilter" min="1.5" max="3.5" step="0.1" value="2.5" oninput="onParamChange()"><span class="range-hint">2.0~2.5</span></div>
+                <div class="form-group"><label for="adv-vCoil">表冷器段</label><input type="number" id="adv-vCoil" min="1.5" max="3.0" step="0.1" value="2.3" oninput="onParamChange()"><span class="range-hint">2.0~2.5</span></div>
+                <div class="form-group"><label for="adv-vHeater">加热器段</label><input type="number" id="adv-vHeater" min="2.0" max="3.5" step="0.1" value="2.8" oninput="onParamChange()"><span class="range-hint">2.5~3.0</span></div>
+                <div class="form-group"><label for="adv-vHumid">加湿器段</label><input type="number" id="adv-vHumid" min="1.5" max="3.0" step="0.1" value="2.5" oninput="onParamChange()"><span class="range-hint">2.0~2.5</span></div>
+                <div class="form-group"><label for="adv-vFan">风机段</label><input type="number" id="adv-vFan" min="3.0" max="6.0" step="0.1" value="4.0" oninput="onParamChange()"><span class="range-hint">3.5~5.0</span></div>
+                <div class="form-group"><label for="adv-vOutlet">出风口</label><input type="number" id="adv-vOutlet" min="3.5" max="7.0" step="0.1" value="5.0" oninput="onParamChange()"><span class="range-hint">4.0~6.0</span></div>
+              </div>
+            </div>
+            <div class="adv-param-group">
+              <div class="adv-param-group-title">截面几何参数</div>
+              <div class="adv-param-grid-4">
+                <div class="form-group"><label for="adv-ar">宽高比 λ</label><input type="number" id="adv-ar" min="0.8" max="3.0" step="0.1" value="1.5" oninput="onParamChange()"><span class="range-hint">1.2~2.0</span></div>
+              </div>
+            </div>
+            <div class="adv-param-group">
+              <div class="adv-param-group-title">安全系数</div>
+              <div class="adv-param-grid-4">
+                <div class="form-group"><label for="adv-KCooling">制冷 K<sub>c</sub></label><input type="number" id="adv-KCooling" min="1.0" max="1.5" step="0.01" value="1.10" oninput="onParamChange()"><span class="range-hint">1.05~1.20</span></div>
+                <div class="form-group"><label for="adv-KHeating">制热 K<sub>h</sub></label><input type="number" id="adv-KHeating" min="1.0" max="1.5" step="0.01" value="1.15" oninput="onParamChange()"><span class="range-hint">1.05~1.25</span></div>
+                <div class="form-group"><label for="adv-KHumid">加湿 K<sub>u</sub></label><input type="number" id="adv-KHumid" min="1.0" max="1.5" step="0.01" value="1.20" oninput="onParamChange()"><span class="range-hint">1.15~1.25</span></div>
+                <div class="form-group"><label for="adv-KFlow">风量 K<sub>f</sub></label><input type="number" id="adv-KFlow" min="1.0" max="1.5" step="0.01" value="1.10" oninput="onParamChange()"><span class="range-hint">1.05~1.20</span></div>
+              </div>
+            </div>
           </div>
           <div class="button-group">
             <button id="calcBtn" onclick="calculate()">开始计算</button>
             <button id="resetBtn" onclick="resetDefaults()">恢复默认</button>
+          </div>
+          <div class="param-text-box">
+            <label class="param-text-label">📋 输入参数（可复制）</label>
+            <textarea id="paramText" class="param-textarea" readonly onclick="this.select()" placeholder="调整参数后自动生成..."></textarea>
           </div>
         </section>
         <section class="output-panel">
@@ -105,8 +166,12 @@
           </div>
           <div class="psychro-chart-container" id="psychroChartContainer" style="display:none;">
             <h3>📈 空气处理过程线（焓湿图 h-d 图）</h3>
-            <p class="chart-explanation">焓湿图是空调设计的核心工具，横轴为干球温度，纵轴为含湿量。图中曲线为等相对湿度线，最上方粗线为饱和线(RH=100%)。蓝色点为入口状态，绿色点为出口状态，红色虚线为空气处理过程。底部显示详细的工况参数和处理类型说明。</p>
-            <canvas id="psychroCanvas" width="600" height="530"></canvas>
+            <div class="chart-toolbar">
+              <button class="toolbar-btn chart-export-btn" onclick="exportPsychroSvg()" title="导出焓湿图为 SVG">📥 导出 SVG</button>
+              <span class="chart-hint">鼠标移到状态点查看详细参数</span>
+            </div>
+            <p class="chart-explanation">焓湿图是空调设计的核心工具，横轴为干球温度，纵轴为含湿量。曲线为等相对湿度线，最上方粗线为饱和线(RH=100%)。蓝色点为入口状态，绿色点为出口状态，红色虚线为空气处理过程。</p>
+            <svg id="psychroSvg" class="psychro-svg" viewBox="0 0 700 560" preserveAspectRatio="xMidYMid meet"></svg>
             <div class="chart-legend">
               <span class="legend-dot inlet"></span>入口空气状态点 &nbsp;
               <span class="legend-dot outlet"></span>出口空气状态点 &nbsp;
@@ -119,8 +184,8 @@
             <div id="airStateContent"></div>
           </div>
           <div id="calcProcess" class="calc-process" style="display:none;">
-            <h3>详细计算过程</h3>
-            <div id="processSteps"></div>
+            <h3 class="collapsible-header" onclick="toggleSection('calcProcess', this)">▼ 详细计算过程</h3>
+            <div id="processSteps" class="collapsible-body"></div>
           </div>
         </section>
       </main>
@@ -217,12 +282,175 @@
         </div>
       </section>
     </div>
+    <div id="tab-design" class="tab-content">
+      <main class="two-col">
+        <section class="input-panel">
+          <h2>🔧 零部件详细设计</h2>
+          <p class="guide-intro">输入参数，自动完成表冷器、加热器、加湿器的详细设计计算。可手动输入或点击导入按钮使用主计算参数。</p>
+          <div class="button-group" style="margin-bottom:14px;">
+            <button onclick="importFromCalc()" class="toolbar-btn" style="padding:8px 16px;font-size:0.85rem;">📥 从计算结果导入</button>
+          </div>
+          <div class="form-group"><label for="cd-massFlow">空气质量流量 (kg/s)</label><input type="number" id="cd-massFlow" step="0.01" value="0.5" oninput="syncFromDesign()"></div>
+          <div class="form-group"><label for="cd-tempIn">入口温度 (℃)</label><input type="number" id="cd-tempIn" step="0.5" value="35" oninput="syncFromDesign()"></div>
+          <div class="form-group"><label for="cd-rhIn">入口相对湿度 (%)</label><input type="number" id="cd-rhIn" step="1" value="80" oninput="syncFromDesign()"></div>
+          <div class="form-group"><label for="cd-tempOut">出口温度 (℃)</label><input type="number" id="cd-tempOut" step="0.5" value="20" oninput="syncFromDesign()"></div>
+          <div class="form-group"><label for="cd-rhOut">出口相对湿度 (%)</label><input type="number" id="cd-rhOut" step="1" value="50" oninput="syncFromDesign()"></div>
+          <div class="design-params-section">
+            <h3 style="font-size:0.9rem;color:#2b6cb0;margin:0 0 8px 0;">设计负荷参数（可手动修改）</h3>
+            <div class="form-group"><label for="cd-Q_coil">表冷器负荷 (kW)</label><input type="number" id="cd-Q_coil" step="0.1" value="0"></div>
+            <div class="form-group"><label for="cd-Q_reheat">再热/预热负荷 (kW)</label><input type="number" id="cd-Q_reheat" step="0.1" value="0"></div>
+            <div class="form-group"><label for="cd-m_humid">加湿量 (kg/h)</label><input type="number" id="cd-m_humid" step="0.1" value="0"></div>
+            <div class="form-group"><label for="cd-T_coil">表冷器出口温度 (℃)</label><input type="number" id="cd-T_coil" step="0.5" value="10"></div>
+            <div class="form-group"><label for="cd-chwSupply">冷冻水供水温度 (℃)</label><input type="number" id="cd-chwSupply" step="0.5" value="7" oninput="syncFromDesign()"></div>
+            <div class="form-group"><label for="cd-coilRH">盘管出口相对湿度（再热前, %）</label><input type="number" id="cd-coilRH" min="85" max="99" step="1" value="95" oninput="syncFromDesign()"></div>
+            <div class="form-group"><label for="cd-chwDeltaT">冷冻水温差 (℃)</label><input type="number" id="cd-chwDeltaT" min="3" max="10" step="0.5" value="5" oninput="syncFromDesign()"></div>
+            <div class="form-group"><label for="cd-volFlow">处理风量 (m³/h)</label><input type="number" id="cd-volFlow" step="10" value="0"></div>
+            <div class="form-group"><label for="cd-tubeSpacing">管间距 (mm)</label><input type="number" id="cd-tubeSpacing" min="10" max="60" step="0.1" value="38.1"></div>
+            <div class="form-group"><label for="cd-rowSpacing">排距 (mm)</label><input type="number" id="cd-rowSpacing" min="10" max="60" step="0.1" value="33"></div>
+            <div class="form-group"><label for="cd-circuits">水回路数</label><input type="number" id="cd-circuits" min="1" max="100" step="1" value="4"></div>
+            <div class="form-group"><label for="cd-tubeOD">管径规格</label>
+              <select id="cd-tubeOD" onchange="fillTubeGeometry()">
+                <option value="16">φ16×0.5mm  (38.1×33)</option>
+                <option value="15.88">φ15.88×0.5mm (38.1×33)</option>
+                <option value="12.7">φ12.7×0.4mm (31.75×27.5)</option>
+                <option value="9.52">φ9.52×0.4mm (25.4×22)</option>
+                <option value="7.94">φ7.94×0.35mm (25.4×22)</option>
+                <option value="7">φ7×0.3mm (21×18.2)</option>
+              </select></div>
+            <div class="form-group"><label for="cd-spacingVar">间距方案</label>
+              <select id="cd-spacingVar" onchange="fillTubeGeometry()">
+                <option value="0">方案一（主选）</option>
+                <option value="1">方案二（备选）</option>
+                <option value="2">方案三（备选）</option>
+              </select></div>
+            <div class="form-group"><label for="cd-finType">翅片类型</label>
+              <select id="cd-finType" onchange="runCoilDesign()">
+                <option value="0">百叶窗翅片</option>
+                <option value="1">正弦波翅片</option>
+                <option value="2">平翅片</option>
+              </select></div>
+          </div>
+          <div class="design-range-section">
+            <h3 class="collapsible-header" onclick="var b=document.getElementById('rangeBody');if(b){var c=b.style.display==='none';b.style.display=c?'block':'none';this.textContent=(c?'▼ ':'▶ ')+this.textContent.slice(2);}">▶ 工况范围设定（边界扫描）</h3>
+            <div id="rangeBody" class="collapsible-body" style="display:none;">
+              <div class="range-grid">
+                <div class="range-item"><label>质量流量 (kg/s)</label><div class="range-inputs"><input type="number" id="cd-r-massFlow-min" step="0.01" value="0.1"><span class="range-sep">~</span><input type="number" id="cd-r-massFlow-max" step="0.01" value="1.1"></div></div>
+                <div class="range-item"><label>入口温度 (℃)</label><div class="range-inputs"><input type="number" id="cd-r-tempIn-min" step="0.5" value="-5"><span class="range-sep">~</span><input type="number" id="cd-r-tempIn-max" step="0.5" value="40"></div></div>
+                <div class="range-item"><label>入口湿度 (%)</label><div class="range-inputs"><input type="number" id="cd-r-rhIn-min" step="1" value="10"><span class="range-sep">~</span><input type="number" id="cd-r-rhIn-max" step="1" value="95"></div></div>
+                <div class="range-item"><label>出口温度 (℃)</label><div class="range-inputs"><input type="number" id="cd-r-tempOut-min" step="0.5" value="15"><span class="range-sep">~</span><input type="number" id="cd-r-tempOut-max" step="0.5" value="25"></div></div>
+                <div class="range-item"><label>出口湿度 (%)</label><div class="range-inputs"><input type="number" id="cd-r-rhOut-min" step="1" value="30"><span class="range-sep">~</span><input type="number" id="cd-r-rhOut-max" step="1" value="70"></div></div>
+              </div>
+              <div style="margin-top:10px;"><button onclick="runDesignBoundary()" class="extreme-btn">▶ 开始边界扫描</button></div>
+              <div id="cd-boundary-result" style="margin-top:10px;"></div>
+            </div>
+          </div>
+          <div class="button-group">
+            <button onclick="switchDesignTab('coil')">❄ 设计表冷器</button>
+            <button onclick="switchDesignTab('heater')">🔥 设计加热器</button>
+            <button onclick="switchDesignTab('humidifier')">💧 设计加湿器</button>
+            <button onclick="switchDesignTab('fan')">💨 设计风机</button>
+          </div>
+          <div class="design-fan-section" style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin:10px 0;background:#fff;display:none;">
+            <h4 style="margin:0 0 8px 0;font-size:0.9rem;">💨 风机设计参数</h4>
+            <div class="card-grid-2">
+              <div class="form-group"><label>处理风量 (m³/h)</label><input type="number" id="cd-fan-volFlow" step="10" readonly style="background:#f7fafc;"></div>
+              <div class="form-group"><label>安全系数 K<sub>flow</sub></label><input type="number" id="cd-fan-Kflow" value="1.10" step="0.05" oninput="runFanDesign()"></div>
+            </div>
+            <h5 style="margin:8px 0 4px 0;font-size:0.82rem;color:#4a5568;">系统阻力明细</h5>
+            <div class="card-grid-2">
+              <div class="form-group"><label>初效过滤器 (Pa)</label><input type="number" id="cd-fan-res-filter" value="80" step="5" oninput="runFanDesign()"></div>
+              <div class="form-group"><label>表冷器 (Pa/排)</label><div style="display:flex;align-items:center;gap:4px;"><input type="number" id="cd-fan-res-coil" value="50" step="5" style="width:70px;" oninput="runFanDesign()"><span>× <span id="cd-fan-coilRows">4</span>排</span></div></div>
+              <div class="form-group"><label>加热器 (Pa)</label><input type="number" id="cd-fan-res-heater" value="30" step="5" oninput="runFanDesign()"></div>
+              <div class="form-group"><label>加湿器 (Pa)</label><input type="number" id="cd-fan-res-humidifier" value="50" step="5" oninput="runFanDesign()"></div>
+              <div class="form-group"><label>风管 (Pa/m)</label><div style="display:flex;align-items:center;gap:4px;"><input type="number" id="cd-fan-res-duct" value="3" step="0.5" style="width:60px;" oninput="runFanDesign()"><span>×</span><input type="number" id="cd-fan-ductLength" value="20" step="5" style="width:60px;" oninput="runFanDesign()"><span>m</span></div></div>
+              <div class="form-group"><label>出口动压 (Pa)</label><input type="number" id="cd-fan-res-outlet" value="80" step="10" oninput="runFanDesign()"></div>
+              <div class="form-group"><label>风机效率 η<sub>fan</sub></label><input type="number" id="cd-fan-efficiency" value="0.75" step="0.05" oninput="runFanDesign()"></div>
+              <div class="form-group"><label>电机效率 η<sub>motor</sub></label><input type="number" id="cd-fan-motorEff" value="0.85" step="0.05" oninput="runFanDesign()"></div>
+            </div>
+          </div>
+        </section>
+        <section class="output-panel">
+          <h2>设计结果</h2>
+          <div class="design-tab-bar">
+            <button class="design-tab-btn active" id="design-tab-coil" onclick="switchDesignTab('coil')">❄ 表冷器</button>
+            <button class="design-tab-btn" id="design-tab-heater" onclick="switchDesignTab('heater')">🔥 加热器</button>
+            <button class="design-tab-btn" id="design-tab-humidifier" onclick="switchDesignTab('humidifier')">💧 加湿器</button>
+            <button class="design-tab-btn" id="design-tab-fan" onclick="switchDesignTab('fan')">💨 风机</button>
+          </div>
+          <div id="design-coil" class="design-content" style="display:block;"><div id="cd-coil-result"><p class="placeholder">点击「设计表冷器」开始计算</p></div></div>
+          <div id="design-heater" class="design-content" style="display:none;"><div id="cd-heater-result"><p class="placeholder">点击「设计加热器」开始计算</p></div></div>
+          <div id="design-humidifier" class="design-content" style="display:none;"><div id="cd-humidifier-result"><p class="placeholder">点击「设计加湿器」开始计算</p></div></div>
+          <div id="design-fan" class="design-content" style="display:none;"><div id="cd-fan-result"><p class="placeholder">点击「设计风机」开始计算</p></div></div>
+        </section>
+      </main>
+    </div>
     <footer class="status-bar">
       <span id="statusText">就绪</span>
     </footer>
   </div>
+
+  <!-- 参数符号表（浮动面板） -->
+  <div id="symPanel" class="sym-panel" style="display:none;">
+    <div class="sym-panel-header">
+      <span>📖 参数符号及物理意义对照表</span>
+      <button class="sym-close" onclick="toggleSymbolTable()">✕</button>
+    </div>
+    <div class="sym-panel-body">
+      <table class="sym-table">
+        <tr><th>符号</th><th>含义</th><th>单位</th><th>说明</th></tr>
+        <tr class="sym-group"><td colspan="4">🌡 空气状态参数</td></tr>
+        <tr><td>t / tg</td><td>干球温度</td><td>℃</td><td>普通温度计测得的空气实际温度</td></tr>
+        <tr><td>tₛ / ts</td><td>湿球温度</td><td>℃</td><td>湿纱布包裹温度计在充分通风下的稳定温度，反映空气冷却极限</td></tr>
+        <tr><td>t_dp</td><td>露点温度</td><td>℃</td><td>空气中水蒸气开始凝结的温度。三温关系：tg ≥ tₛ ≥ t_dp</td></tr>
+        <tr><td>RH</td><td>相对湿度</td><td>%</td><td>空气中水汽分压力与同温下饱和水汽压之比</td></tr>
+        <tr><td>P_sat</td><td>饱和水汽压</td><td>kPa</td><td>一定温度下空气中能容纳的最大水蒸气分压力（Magnus/Sonntag公式）</td></tr>
+        <tr><td>P_v</td><td>水蒸气分压力</td><td>kPa</td><td>空气中实际水蒸气产生的压力，P_v = RH × P_sat</td></tr>
+        <tr><td>W / d</td><td>含湿量</td><td>kg/kg</td><td>每千克干空气所含的水蒸气质量，W = 0.622·P_v/(P_atm-P_v)</td></tr>
+        <tr><td>h / i</td><td>比焓</td><td>kJ/kg</td><td>单位质量干空气的总热量 = 1.006t + W(2501+1.86t)</td></tr>
+        <tr><td>ρ</td><td>湿空气密度</td><td>kg/m³</td><td>考虑湿度修正的密度，ρ = P/(R·T_v)</td></tr>
+        <tr><td>P_atm</td><td>大气压力</td><td>kPa</td><td>标准大气压 101.325 kPa</td></tr>
+
+        <tr class="sym-group"><td colspan="4">⚡ 负荷参数</td></tr>
+        <tr><td>Q_c</td><td>制冷量</td><td>kW</td><td>空气处理所需冷量 Q_c = ṁ·(h₁-h₂)</td></tr>
+        <tr><td>Q_h</td><td>加热量</td><td>kW</td><td>显热加热量 Q_h = ṁ·c_p·(t₂-t₁)</td></tr>
+        <tr><td>Q_reheat</td><td>再热量</td><td>kW</td><td>盘管出口到目标温度的加热量</td></tr>
+        <tr><td>dw</td><td>除湿量/加湿量</td><td>g/s</td><td>进出口含湿量差 ṁ·(W₁-W₂) >0 为除湿，<0 为加湿</td></tr>
+        <tr><td>ṃ</td><td>质量流量</td><td>kg/s</td><td>干空气质量流量</td></tr>
+        <tr><td>ṁ_chw</td><td>冷冻水流量</td><td>kg/s</td><td>所需冷冻水流量 = Q_coil / (c_pw·Δt)</td></tr>
+
+        <tr class="sym-group"><td colspan="4">❄ 表冷器/盘管参数</td></tr>
+        <tr><td>ε</td><td>接触系数</td><td>—</td><td>ε = 1−(tg₂−ts₂)/(tg₁−ts₁)，反映盘管与空气的接触完善程度</td></tr>
+        <tr><td>BF</td><td>旁通系数</td><td>—</td><td>BF = 1−ε，未经处理的空气比例</td></tr>
+        <tr><td>ξ</td><td>析湿系数</td><td>—</td><td>ξ = (h₁−h₂)/[c_p·(t₁−t₂)]，总换热量与显热之比，>1为湿工况</td></tr>
+        <tr><td>K</td><td>传热系数</td><td>W/m²K</td><td>盘管总传热系数，由迎面风速、排数、析湿系数决定</td></tr>
+        <tr><td>T_coil</td><td>盘管出口温度</td><td>℃</td><td>空气经盘管处理后的温度（再热前）</td></tr>
+        <tr><td>LMTD</td><td>对数平均温差</td><td>℃</td><td>ΔT₁−ΔT₂ / ln(ΔT₁/ΔT₂)，逆流换热的平均驱动力</td></tr>
+        <tr><td>Δh_m</td><td>对数平均焓差</td><td>kJ/kg</td><td>湿工况换热驱动力，替代LMTD用于潜热为主的换热</td></tr>
+        <tr><td>v_y</td><td>迎面风速</td><td>m/s</td><td>空气进入盘管截面的流速，推荐 2.0~2.5 m/s</td></tr>
+        <tr><td>v_w</td><td>管内流速</td><td>m/s</td><td>冷冻水在盘管内的流速，推荐 1.0~2.0 m/s</td></tr>
+
+        <tr class="sym-group"><td colspan="4">🏗 结构尺寸参数</td></tr>
+        <tr><td>Q_v</td><td>体积流量</td><td>m³/h</td><td>处理风量 Q_v = ṁ/ρ × 3600</td></tr>
+        <tr><td>A_face</td><td>迎面面积</td><td>m²</td><td>表冷器截面积，A_face = Q_v / v_y</td></tr>
+        <tr><td>λ</td><td>宽高比</td><td>—</td><td>箱体宽度与高度之比，推荐 1.5</td></tr>
+        <tr><td>rows</td><td>盘管排数</td><td>排</td><td>气流方向的铜管排数，2~8排</td></tr>
+        <tr><td>Δt_chw</td><td>冷冻水温差</td><td>℃</td><td>供回水温差，常用 5℃</td></tr>
+
+        <tr class="sym-group"><td colspan="4">🔢 物理常数</td></tr>
+        <tr><td>c_p</td><td>空气定压比热</td><td>kJ/(kg·K)</td><td>干空气定压比热容 = 1.006</td></tr>
+        <tr><td>c_pw</td><td>水定压比热</td><td>kJ/(kg·K)</td><td>水的定压比热容 = 4.187</td></tr>
+        <tr><td>r₀</td><td>0℃汽化潜热</td><td>kJ/kg</td><td>0℃水的蒸发潜热 = 2501</td></tr>
+        <tr><td>R</td><td>空气气体常数</td><td>kJ/(kg·K)</td><td>干空气气体常数 = 0.287</td></tr>
+        <tr><td>M_w/M_a</td><td>分子量比</td><td>—</td><td>水/干空气分子量比 = 18.02/28.97 = 0.622</td></tr>
+        <tr><td>ℓ₀</td><td>0℃热力学温度</td><td>K</td><td>0℃ = 273.15 K</td></tr>
+      </table>
+    </div>
+  </div>
+  <div id="symOverlay" class="sym-overlay" style="display:none;" onclick="toggleSymbolTable()"></div>
   <script src="calculations.js"></script>
   <script src="tutorial.js"></script>
   <script src="renderer.js"></script>
+  <script src="extreme.js"></script>
+  <script src="component_design.js"></script>
 </body>
 </html>
