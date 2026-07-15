@@ -376,6 +376,70 @@ function runCoilDesign() {
   var T_chw_in = parseFloat(document.getElementById("cd-chwSupply").value) || 7;
   var T_chw_out = T_chw_in + chwDT;
 
+  // === P1: 校核模式 ===
+  // 校核模式：根据已有盘管几何参数，反算实际能达到的冷量
+  var isCheckMode = (parseInt(document.getElementById("cd-mode").value) || 0) === 1;
+  if (isCheckMode && W > 0 && H > 0 && coil_rows > 0) {
+    // 校核模式下直接使用当前几何参数
+    var tubeSpacing_cm = parseFloat(document.getElementById("cd-tubeSpacing").value) || 38.1;
+    var rowSpacing_cm = parseFloat(document.getElementById("cd-rowSpacing").value) || 33;
+    var circuits_cm = parseInt(document.getElementById("cd-circuits").value) || 4;
+    var tubeOD_cm = parseFloat(document.getElementById("cd-tubeOD").value) || 16;
+    var tubeWT_cm = tubeOD_cm >= 14 ? 0.5 : tubeOD_cm >= 11 ? 0.4 : tubeOD_cm >= 7.5 ? 0.35 : 0.3;
+    var tubeID_cm = (tubeOD_cm - 2 * tubeWT_cm) / 1000;
+    var tubesPerRow_cm = H > 0 ? Math.floor(H * 1000 / tubeSpacing_cm) : 0;
+    var totalTubes_cm = tubesPerRow_cm * coil_rows;
+    if (totalTubes_cm > 0 && tubeID_cm > 0) {
+      var totalTubeLen_cm = totalTubes_cm * W;  // 总管长 m
+      var areaInner_cm = totalTubes_cm * Math.PI * tubeID_cm * W;  // 内表面积 m²
+      var areaOuter_cm = totalTubes_cm * Math.PI * (tubeOD_cm / 1000) * W;  // 外表面积 m²
+      var A_face_cm = W * H;  // 迎风面积 m²
+      var v_actual_cm = vol_m3s > 0 ? vol_m3s / A_face_cm : v_face;
+      // 管内流速（按回路数分流）
+      var V_ch_cm = chwDT > 0 ? Q_coil / (4.187 * chwDT) / 1000 * 3600 : 0;
+      var w_cm = (V_ch_cm > 0 && tubeID_cm > 0 && circuits_cm > 0) ?
+        V_ch_cm / 3600 / (Math.PI * tubeID_cm * tubeID_cm / 4 * circuits_cm) : 1.0;
+      w_cm = Math.max(0.5, Math.min(3.0, w_cm));
+      // 计算传热系数 α_air (用当前几何)
+      var alphaAir_cm = v_actual_cm > 0 ? calcAlphaAir(v_actual_cm, 0.0035, 1.0, (T_in + T_out) / 2) : 0;
+      var alphaWater_cm = tubeID_cm > 0 && w_cm > 0 ? calcAlphaWater(w_cm, tubeID_cm, (T_chw_in + T_chw_out) / 2) : 0;
+      // 翅片效率
+      var finEff_cm = calcFinEfficiency(alphaAir_cm, 237, 0.00013,
+        tubeOD_cm / 1000, tubeSpacing_cm / 1000, rowSpacing_cm / 1000, 0.0025, 1);
+      var K_cm = 1 / (1/(alphaAir_cm * finEff_cm.etaSurface) + (tubeOD_cm/1000 - tubeID_cm) / (2 * 393) + 0.0002 + 1/alphaWater_cm);
+      // NTU 法估算实际换热量
+      var cp_air = 1.006;
+      var cp_water = 4.187;
+      var m_air = massFlow || 0.5;
+      var m_water = chwDT > 0 ? Q_coil / (cp_water * chwDT) : 1.0;
+      m_water = Math.max(m_water, 0.1);
+      var C_min = Math.min(m_air * cp_air, m_water * cp_water);
+      var C_max = Math.max(m_air * cp_air, m_water * cp_water);
+      var NTU = K_cm * areaOuter_cm * 1.1 / C_min;  // 1.1 = 污垢系数
+      var CR = C_min / C_max;
+      // 混合流 ε-NTU
+      var eps_ntu;
+      if (Math.abs(CR - 1) < 0.001) {
+        eps_ntu = NTU / (1 + NTU);
+      } else {
+        eps_ntu = (1 - Math.exp(-NTU * (1 - CR))) / (1 - CR * Math.exp(-NTU * (1 - CR)));
+      }
+      var Q_actual = eps_ntu * C_min * ((T_in + T_out) / 2 - (T_chw_in + T_chw_out) / 2);
+      // 出口温度估算
+      var T_out_actual = T_in - Q_actual / (m_air * cp_air);
+      // 出口含湿量（假设沿饱和线）
+      var xi_check = calcXi(enthalpy(T_in, calcHumidityRatio(T_in, rhIn, pa)),
+        enthalpy(T_out_actual, calcHumidityRatio(T_out_actual, 100, pa)), T_in, T_out_actual);
+      // 校核结果：替换 Q_coil 为实际值，后续 LMTD 用实际值
+      Q_coil = Math.max(0, Q_actual);
+      // 输出校核信息到临时变量（后续被报告使用）
+      var checkInfo = "✅ 校核完成：实际冷量 " + fmt(Q_actual, 2) + " kW（目标 " + fmt(parseFloat(document.getElementById("cd-Q_coil").value)||0, 2) + " kW），出口温度" + fmt(T_out_actual, 1) + "℃";
+      document.getElementById("cd-Q_coil").value = fmt(Q_coil, 2);
+      document.getElementById("cd-T_coil").value = fmt(T_out_actual, 1);
+      setStatusBar("校核模式：已计算实际冷量 " + fmt(Q_actual, 2) + " kW", "");
+    }
+  }
+
   // --- 盘管面积热力学计算（LMTD 法 + 焓差法，依据 GB/T 14294-2026 / 《实用供热空调设计手册》）---
   // 计算空气状态
   var rhIn_coil = rhIn;
@@ -589,7 +653,9 @@ function runCoilDesign() {
   // 两法排数差异
   var rowsAgree = (rows_calc > 0 && cf.valid) ? Math.abs(rows_calc - cf.rows) <= 2 : null;
 
-  document.getElementById("cd-coil-result").innerHTML = buildDesignReport("❄ 表冷器详细设计", [
+  var modeLabel = isCheckMode ? "🔍 校核模式" : "❄ 设计模式";
+  var modeDesc = isCheckMode ? "（根据已有盘管几何校核实际冷量：W×H=" + fmt(W*1000,0) + "×" + fmt(H*1000,0) + "mm，排数=" + coil_rows + "，回路=" + circuits + "）" : "";
+  document.getElementById("cd-coil-result").innerHTML = buildDesignReport(modeLabel + " 表冷器" + modeDesc, [
     { title: "一、设计输入参数", lines: [
       { label: "设计制冷负荷 Q_coil", value: fmt(Q_coil, 2) + " kW" },
       { label: "处理风量", value: fmt(volFlow, 0) + " m³/h (" + fmt(vol_m3s, 3) + " m³/s)" },
