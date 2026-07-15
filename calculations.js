@@ -476,6 +476,50 @@ function calcCoilKPrecise(alphaAir, alphaWater, etaSurface, tubeOD, tubeID, lamb
 }
 
 /**
+ * 接水盘（冷凝水盘）尺寸计算
+ * 依据：GB/T 14294-2026《组合式空调机组》冷凝水盘要求
+ *       盘宽需覆盖盘管+挡水板投影；盘深需容纳盘管段深度并接住带水；
+ *       盘侧高按 1% 坡度反推，最小 50mm。
+ * @param {number} W — 表冷器迎风宽度 m
+ * @param {number} coilDepth — 盘管深度（气流方向）mm
+ * @param {number} [eliminatorDepth] — 挡水板深度 mm，默认 100（2~3 折标准型）
+ * @param {number} [slope] — 盘底坡度，默认 0.01（1%）
+ * @param {number} [marginSide] — 两侧各宽出余量 mm，默认 30
+ * @param {number} [marginEnd] — 气流方向前后余量 mm（接住带水），默认 30
+ * @param {number} [minSideHeight] — 盘最小侧高 mm，默认 50
+ * @returns {object} { width, depth, lowSideHeight, highSideHeight, slope, drainPipe, trapHeight, material }
+ */
+function calcDrainPan(W, coilDepth, eliminatorDepth, slope, marginSide, marginEnd, minSideHeight) {
+  slope = (slope != null) ? slope : 0.01;            // 1% 坡度
+  marginSide = (marginSide != null) ? marginSide : 30;
+  marginEnd = (marginEnd != null) ? marginEnd : 30;
+  eliminatorDepth = (eliminatorDepth != null) ? eliminatorDepth : 100;
+  minSideHeight = (minSideHeight != null) ? minSideHeight : 50;
+
+  // 宽度 = 迎风宽 + 两侧余量（覆盖盘管+挡水板投影宽度）
+  var width = W * 1000 + 2 * marginSide;
+
+  // 深度 = 盘管深度 + 挡水板深度 + 前后余量（接住过水/带水）
+  var depth = coilDepth + eliminatorDepth + 2 * marginEnd;
+
+  // 盘高：低侧按最小 50mm，高侧 = 低侧 + depth×slope（坡度引起的累积升高）
+  var lowSideHeight = minSideHeight;
+  var highSideRise = depth * slope;                  // 坡度累积升高 mm
+  var highSideHeight = lowSideHeight + highSideRise;
+
+  return {
+    width: width,
+    depth: depth,
+    lowSideHeight: lowSideHeight,
+    highSideHeight: highSideHeight,
+    slope: slope,
+    drainPipe: "DN32",
+    trapHeight: 50,
+    material: "304 不锈钢，厚度 ≥ 1.2mm"
+  };
+}
+
+/**
  * 接触系数 ε 查表（带迎面风速修正）
  * 参考：《空气调节设计手册》第三版，表冷器接触系数表（JTL-2型铜管铝翅片，2.3~3.0mm翅距）
  * @param {number} vy — 迎面风速 (m/s)
