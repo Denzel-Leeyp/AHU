@@ -3142,8 +3142,91 @@ function drawPsychroChart(data) {
   parts.push('<text x="'+ml+'" y="'+(dY+18)+'" font-size="10" fill="#4a5568">工况: '+data.tempIn+'℃/'+data.rhIn+'% → '+data.tempOut+'℃/'+data.rhOut+'% | ṁ='+data.massFlow+' kg/s | P='+fmt(data.P_atm,1)+' kPa</text>');
   parts.push('<text x="'+ml+'" y="'+(dY+32)+'" font-size="10" fill="#4a5568">Δh='+fmt(data.h_in-data.h_out,2)+' kJ/kg | 净制冷='+fmt(data.Q_cooling,2)+' kW | 盘管负荷='+fmt(data.Q_coil_actual||data.Q_cooling,2)+' kW</text>');
   parts.push('<text x="'+ml+'" y="'+(dY+46)+'" font-size="10" font-weight="bold" fill="#2b6cb0">处理类型: '+esc(processType)+'</text>');
-  parts.push('<text x="'+ml+'" y="'+(dY+62)+'" font-size="9" fill="#718096">注：焓湿图基于 GB/T 35226-2017，大气压 P='+fmt(data.P_atm,1)+' kPa。鼠标悬停状态点查看详细参数。</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+62)+'" font-size="9" fill="#718096">注：焓湿图基于 GB/T 35226-2017，大气压 P='+fmt(data.P_atm,1)+' kPa。鼠标悬停状态点查看详细参数，移动鼠标读取任意点 T/d/h/RH/td 值。</text>');
   svg.innerHTML = parts.join('');
+
+  // ===== P4.8: 十字光标交互（移动鼠标读取任意点状态）=====
+  setupPsychroInteraction(svg, tx, ty, T_min, T_max, W_min, W_max, ml, mt, pw, ph, data.P_atm);
+}
+
+/**
+ * P4.8: 设置焓湿图鼠标交互（十字光标 + 状态读数）
+ * 鼠标在绘图区内移动时，显示十字准线和当前点的 T/d/h/RH/td 值
+ */
+function setupPsychroInteraction(svg, tx, ty, T_min, T_max, W_min, W_max, ml, mt, pw, ph, P_atm) {
+  // 移除旧的事件（防重复绑定）
+  svg.style.position = 'relative';
+  var cursorGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  cursorGroup.setAttribute('id', 'psychro-cursor-group');
+  cursorGroup.setAttribute('style', 'pointer-events:none;');
+  svg.appendChild(cursorGroup);
+
+  var crossX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  crossX.setAttribute('id', 'psychro-cursor-x');
+  crossX.setAttribute('stroke', '#e53e3e');
+  crossX.setAttribute('stroke-width', '0.5');
+  crossX.setAttribute('stroke-dasharray', '4,2');
+  cursorGroup.appendChild(crossX);
+
+  var crossY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  crossY.setAttribute('id', 'psychro-cursor-y');
+  crossY.setAttribute('stroke', '#e53e3e');
+  crossY.setAttribute('stroke-width', '0.5');
+  crossY.setAttribute('stroke-dasharray', '4,2');
+  cursorGroup.appendChild(crossY);
+
+  var tooltip = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  tooltip.setAttribute('id', 'psychro-cursor-tooltip');
+  tooltip.setAttribute('font-size', '10');
+  tooltip.setAttribute('fill', '#e53e3e');
+  tooltip.setAttribute('font-weight', 'bold');
+  cursorGroup.appendChild(tooltip);
+
+  function updateCursor(e) {
+    var rect = svg.getBoundingClientRect();
+    var svgW = 700, svgH = 560;
+    var px = (e.clientX - rect.left) / rect.width * svgW;
+    var py = (e.clientY - rect.top) / rect.height * svgH;
+
+    // 判断是否在绘图区内
+    if (px < ml || px > ml + pw || py < mt || py > mt + ph) {
+      crossX.setAttribute('x1', '0'); crossX.setAttribute('x2', '0');
+      crossY.setAttribute('y1', '0'); crossY.setAttribute('y2', '0');
+      tooltip.textContent = '';
+      return;
+    }
+
+    // 像素 → 状态量
+    var T_read = (px - ml) / pw * (T_max - T_min) + T_min;
+    var W_read = (1 - (py - mt) / ph) * (W_max - W_min) + W_min;
+    if (W_read < 0) W_read = 0;
+
+    // 更新十字线
+    crossX.setAttribute('x1', '' + ml); crossX.setAttribute('x2', '' + (ml + pw));
+    crossX.setAttribute('y1', '' + py); crossX.setAttribute('y2', '' + py);
+    crossY.setAttribute('x1', '' + px); crossY.setAttribute('x2', '' + px);
+    crossY.setAttribute('y1', '' + mt); crossY.setAttribute('y2', '' + (mt + ph));
+
+    // 计算状态参数
+    var P_sat_read = satPressure(T_read);
+    var P_v_read = W_read * P_atm / (0.622 + W_read);
+    var RH_read = (P_sat_read > 0.01) ? (P_v_read / P_sat_read * 100) : 0;
+    RH_read = Math.max(0, Math.min(100, RH_read));
+    var h_read = enthalpy(T_read, W_read);
+    var td_read = calcDewPoint(P_v_read);
+    var tdStr = isNaN(td_read) ? '—' : '' + td_read.toFixed(1) + '°C';
+
+    tooltip.setAttribute('x', '' + (px + 8));
+    tooltip.setAttribute('y', '' + (py - 8));
+    tooltip.textContent = 'T=' + T_read.toFixed(1) + '°C d=' + (W_read * 1000).toFixed(1) + 'g/kg h=' + h_read.toFixed(1) + 'kJ/kg RH=' + RH_read.toFixed(0) + '% td=' + tdStr;
+  }
+
+  svg.addEventListener('mousemove', updateCursor);
+  svg.addEventListener('mouseleave', function() {
+    crossX.setAttribute('x1', '0'); crossX.setAttribute('x2', '0');
+    crossY.setAttribute('y1', '0'); crossY.setAttribute('y2', '0');
+    tooltip.textContent = '';
+  });
 }
 
 /** 导出焓湿图为 SVG 文件 */

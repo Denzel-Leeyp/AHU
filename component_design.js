@@ -283,7 +283,7 @@ function importFromCalc() {
   var ri = parseFloat(document.getElementById("rhIn").value) || 80;
   var to = parseFloat(document.getElementById("tempOut").value) || 20;
   var ro = parseFloat(document.getElementById("rhOut").value) || 50;
-  var pa = 101.325;
+  var pa = parseFloat(document.getElementById("cd-atmPressure").value) || parseFloat(document.getElementById("atmPressure").value) || 101.325;
 
   var W_in = calcHumidityRatio(ti, ri, pa);
   var W_out = calcHumidityRatio(to, ro, pa);
@@ -358,7 +358,7 @@ function runCoilDesign() {
   var T_out = parseFloat(document.getElementById("cd-tempOut").value) || 20;
   var T_coil = parseFloat(document.getElementById("cd-T_coil").value) || 10;
   var massFlow = parseFloat(document.getElementById("cd-massFlow").value) || 0.5;
-  var pa = 101.325;
+  var pa = parseFloat(document.getElementById("cd-atmPressure").value) || 101.325;
 
   var ep = getEngineeringParams();
   var v_face = ep.v_coil;
