@@ -395,6 +395,42 @@ function calcCoilK(vy, w, xi, rows, di, de, Ta, Tw) {
 }
 
 /**
+ * 表冷器总传热系数 K — 分项热阻合成法（P2 新增）
+ * 基于热阻串联模型，适用于任意管径/翅片/材料组合
+ * K = 1 / [ 1/(α_air·η_s) + R_tube + R_foul + 1/α_water ]
+ * 参考：ASHRAE Handbook — HVAC Systems and Equipment, Heat Exchanger Design
+ * @param {number} alphaAir — 空气侧换热系数 W/(m²·K)
+ * @param {number} alphaWater — 水侧换热系数 W/(m²·K)
+ * @param {number} etaSurface — 表面效率（从 calcFinEfficiency 获取）
+ * @param {number} [tubeOD] — 管外径 m，用于管壁热阻
+ * @param {number} [tubeID] — 管内径 m，用于管壁热阻
+ * @param {number} [lambdaTube] — 管材导热系数 W/(m·K)，铜≈393
+ * @param {number} [R_foul] — 污垢热阻 m²·K/W，默认 0.0002
+ * @param {number} [xi] — 析湿系数（湿工况修正 α_air），默认 1.0
+ * @returns {number} 总传热系数 W/(m²·K)
+ */
+function calcCoilKPrecise(alphaAir, alphaWater, etaSurface, tubeOD, tubeID, lambdaTube, R_foul, xi) {
+  xi = Math.max(1.0, xi || 1.0);
+  etaSurface = (etaSurface != null) ? Math.max(0.1, Math.min(1.0, etaSurface)) : 1.0;
+  lambdaTube = lambdaTube || 393;  // 铜 393 W/(m·K)
+  R_foul = (R_foul != null) ? R_foul : 0.0002;
+
+  var R_air = 1 / (alphaAir * Math.pow(xi, 0.6) * etaSurface);
+  var R_tube = 0;
+  if (tubeOD && tubeID && tubeOD > tubeID) {
+    R_tube = (tubeOD - tubeID) / (2 * lambdaTube * (tubeOD + tubeID) / 2);
+    // 简化：圆管壁导热 R = ln(Do/Di) / (2*pi*lambda) × 基于外表面积
+    R_tube = tubeOD * Math.log(tubeOD / tubeID) / (2 * lambdaTube);
+  }
+  var R_water = 1 / alphaWater;
+  var R_total = R_air + R_tube + R_foul + R_water;
+
+  if (R_total <= 0) return 0;
+  var K = 1 / R_total;
+  return Math.max(5, Math.min(200, K));
+}
+
+/**
  * 接触系数 ε 查表（带迎面风速修正）
  * 参考：《空气调节设计手册》第三版，表冷器接触系数表（JTL-2型铜管铝翅片，2.3~3.0mm翅距）
  * @param {number} vy — 迎面风速 (m/s)
