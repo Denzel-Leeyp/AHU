@@ -650,6 +650,16 @@ function runCoilDesign() {
   var dewPoint = calcDewPoint((rhIn / 100) * satPressure(T_in));
   var dewPointValid = !isNaN(dewPoint);
 
+  // === P2: 分项合成 K 值法 ===
+  var alphaAir_precise = v_face > 0 ? calcAlphaAir(v_face, 0.0035, xi_lmtd, (T_in + T_out) / 2) : 0;
+  var alphaWater_precise = tubeID > 0 && waterVel > 0 ? calcAlphaWater(waterVel, tubeID / 1000, (T_chw_in + T_chw_out) / 2) : 0;
+  var K_precise = (alphaAir_precise > 0 && alphaWater_precise > 0)
+    ? calcCoilKPrecise(alphaAir_precise, alphaWater_precise, etaSurface,
+        tubeOD / 1000, tubeID / 1000, 393, 0.0002, xi_lmtd)
+    : 0;
+  var K_diff = K_coil > 0 && K_precise > 0 ? Math.abs(K_precise - K_coil) / K_coil * 100 : 0;
+  var K_agree = K_diff <= 15 ? "✅ 一致性良好（差异 " + fmt(K_diff, 1) + "%）" : "⚠️ 差异较大（" + fmt(K_diff, 1) + "%），建议使用分项合成法作为参考";
+
   // 两法排数差异
   var rowsAgree = (rows_calc > 0 && cf.valid) ? Math.abs(rows_calc - cf.rows) <= 2 : null;
 
@@ -685,7 +695,9 @@ function runCoilDesign() {
       { label: "ΔT₂（空气出−水入）", value: fmt(dT2, 2) + " ℃" },
       { label: "对数平均温差 LMTD", value: LMTD > 0 ? fmt(LMTD, 2) + " ℃" : "—（温差不足，无法计算）" },
       { label: "析湿系数 ξ", value: xi_lmtd > 1.01 ? fmt(xi_lmtd, 3) + "（湿工况）" : "1.000（干工况）" },
-      { label: "传热系数 K（计算值）", value: K_coil > 0 ? fmt(K_coil, 1) + " W/(m²·K)（迎面风速" + fmt(v_face,1) + " m/s, ξ=" + fmt(xi_lmtd,2) + "）" : "45 W/(m²·K)（默认）" },
+      { label: "传热系数 K（经验公式）", value: K_coil > 0 ? fmt(K_coil, 1) + " W/(m²·K)（迎面风速" + fmt(v_face,1) + " m/s, ξ=" + fmt(xi_lmtd,2) + "）" : "45 W/(m²·K)（默认）" },
+      { label: "传热系数 K（分项合成法）", value: K_precise > 0 ? fmt(K_precise, 1) + " W/(m²·K)（α_air=" + fmt(alphaAir_precise, 1) + ", α_water=" + fmt(alphaWater_precise, 1) + ", η_s=" + fmt(etaSurface*100, 1) + "%）" : "—（数据不足，需α_air和α_water均>0）" },
+      { label: "两法对照", value: (K_coil > 0 && K_precise > 0) ? K_agree : "—" },
       { label: "对数平均焓差 Δhm（湿工况）", value: dh_m > 0 ? fmt(dh_m, 2) + " kJ/kg" : "—" },
       { label: "污垢系数 F_foul", value: "1.10" },
       { label: "表冷器负荷(输入) Q_coil", value: fmt(Q_coil, 2) + " kW（含潜热）" },
