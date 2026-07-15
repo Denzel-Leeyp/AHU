@@ -560,7 +560,10 @@ function runCoilDesign() {
                                                  // 集水管(联箱)沿 H 方向布置在 W 一侧，底部进水、顶部出水（下进上出）
   var outerHeight = H * 1000 + 100;              // 外形高度 (mm) = 管束净高 + 上下框架(50×2)
   var outerDepth = coil_rows * rowSpacing + 40;   // 外形深度 (mm) = 管束深度 + 前后端板(20×2)
-  var dripPanWidth = W * 1000 + 60;               // 接水盘宽度 (mm)
+  // === 接水盘尺寸计算（P5：补充深度/盘高）===
+  var eliminatorDepthEst = 100;  // 挡水板深度 mm（2~3 折标准型，含框架）
+  var drainPan = calcDrainPan(W, outerDepth, eliminatorDepthEst, 0.01, 30, 30, 50);
+  var dripPanWidth = drainPan.width;               // 接水盘宽度 mm
   var areaPerRow = A_face * 11;
   // 经验值 11 m²/m²迎风面：每 1 m² 迎风面可布置约 11 m² 换热面积/排
   // 该系数是管径、管间距、翅片密度的综合结果，用于方案估算
@@ -800,7 +803,11 @@ function runCoilDesign() {
       { label: "总管路长度（各排合计）", value: totalTubeLength > 0 ? fmt(totalTubeLength, 1) + " m" : "—" },
       { label: "管束高度（管间距×孔数）", value: fmt(bundleHeight * 1000, 0) + " mm（" + tubeSpacing + "mm × " + tubesPerRow + "孔）" + (Math.abs(bundleHeight - H) > 0.05 ? " ⚠ " + fmt(H * 1000, 0) + "mm(迎风高) vs " + fmt(bundleHeight * 1000, 0) + "mm(管束高)偏差" + fmt(Math.abs(bundleHeight - H) * 1000, 0) + "mm" : " ✅ 与迎风面高度一致") },
       { label: "表冷器外形尺寸（宽×高×深）", value: outerWidth + " × " + outerHeight + " × " + outerDepth + " mm（宽含框架及U弯(70mm)+集水管侧(130mm)，集水管沿H方向布置、下进上出）" },
-      { label: "接水盘宽度", value: dripPanWidth + " mm（两侧各宽出 30mm）" }
+      { label: "接水盘宽度", value: dripPanWidth + " mm（两侧各宽出 30mm，覆盖盘管+挡水板投影）" },
+      { label: "接水盘深度", value: fmt(drainPan.depth, 0) + " mm（盘管深 " + outerDepth + " + 挡水板深 " + eliminatorDepthEst + " + 前后余量 60）" },
+      { label: "接水盘侧高", value: fmt(drainPan.lowSideHeight, 0) + " ~ " + fmt(drainPan.highSideHeight, 0) + " mm（低侧≥50mm，坡度 1% 引起高侧升高 " + fmt(drainPan.highSideHeight - drainPan.lowSideHeight, 0) + "mm）" },
+      { label: "接水盘材质/坡度", value: drainPan.material + "，坡度 ≥ 1%，排水口在最低点" },
+      { label: "排水管", value: drainPan.drainPipe + " PVC-U + P 型存水弯 ≥ " + drainPan.trapHeight + "mm（防负压倒吸）" }
     ]}
   ]);
   // 插入盘管排列示意图 (在"三-5"之后, "四"之前)
