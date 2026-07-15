@@ -518,14 +518,43 @@ function runCoilDesign() {
         : "⚠️ 可用面积 " + fmt(areaAvailable,1) + " m² < 所需 " + fmt(areaRequired,1) + " m²，不足 " + fmt(Math.abs(areaMargin),1) + "%")
     : "—（LMTD 未计算）";
 
+  // === 盘管供给能力校核 ===
+  var supplyMsg = "";
+  var supplyShortfall = 0;
+  var maxSupplyCOOLING = 0;
+  if (Q_coil > 0 && K_coil > 0 && LMTD > 0 && areaAvailable > 0) {
+    maxSupplyCOOLING = K_coil * areaAvailable * LMTD / F_foul;
+    var supplyMargin = (maxSupplyCOOLING / Q_coil - 1) * 100;
+    if (supplyMargin < -5) {
+      supplyShortfall = Q_coil - maxSupplyCOOLING;
+      supplyMsg = "⚠️ 需求冷量 " + fmt(Q_coil,1) + " kW > 盘管最大供给 " + fmt(maxSupplyCOOLING,1) + " kW，短缺 " + fmt(supplyShortfall,1) + " kW。当前 " + fmt(W*1000,0) + "×" + fmt(H*1000,0) + "mm(" + fmt(A_face,3) + "m²) + " + coil_rows + "排结构无法满足负荷需求，建议增大迎风面或增加排数。";
+    } else if (Math.abs(supplyMargin) <= 5) {
+      supplyMsg = "✅ 盘管供给能力与需求基本匹配（裕度 " + fmt(supplyMargin,1) + "%）";
+    } else {
+      supplyMsg = "✅ 盘管供给能力充足，裕度 " + fmt(supplyMargin,1) + "%";
+    }
+  } else {
+    supplyMsg = "—（缺少 K 或 LMTD 数据，无法校核）";
+  }
+  var V_ch_effective = (supplyShortfall > 0 && maxSupplyCOOLING > 0) ? maxSupplyCOOLING / (4.187 * chwDT) / 1000 * 3600 : V_ch;
+  var coil_ok = supplyShortfall <= 0;
+
   // 管内流速（N 个回路并联，流量按 circuits 分流）
-  var waterVel = (V_ch > 0 && tubeID > 0 && circuits > 0) ?
-    V_ch / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * circuits) : 0;
+  var waterVel = (V_ch_effective > 0 && tubeID > 0 && circuits > 0) ?
+    V_ch_effective / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * circuits) : 0;
+  // GB 50736 推荐 1.0~2.0 m/s；低于 0.5 时空气无法排出，高于 3.0 会冲蚀铜管
+  var waterVelMsg = "";
+  if (waterVel <= 0) waterVelMsg = "—（无流量）";
+  else if (waterVel < 0.5) waterVelMsg = "⚠️ 流速 " + fmt(waterVel,2) + " m/s 过低（<0.5），空气无法排出，建议减至 " + circuits_rec + " 回路";
+  else if (waterVel < 1.0) waterVelMsg = "⚠️ 流速 " + fmt(waterVel,2) + " m/s 偏低，建议调至 " + circuits_rec + " 回路达 1.5m/s";
+  else if (waterVel <= 2.0) waterVelMsg = "✅ 流速 " + fmt(waterVel,2) + " m/s 符合 GB 50736 (1.0~2.0 m/s)";
+  else if (waterVel <= 3.0) waterVelMsg = "⚠️ 流速 " + fmt(waterVel,2) + " m/s 偏高（>2.0），建议增至 " + circuits_rec + " 回路";
+  else waterVelMsg = "⚠️ 流速 " + fmt(waterVel,2) + " m/s 过高（>3.0），会冲蚀铜管，建议增至 " + circuits_rec + " 回路";
   var waterVelOk = waterVel >= 1.0 && waterVel <= 2.0;
 
   // 推荐回路数（目标流速 1.5 m/s）
-  var circuits_rec = (V_ch > 0 && tubeID > 0) ?
-    Math.ceil(V_ch / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * 1.5)) : 4;
+  var circuits_rec = (V_ch_effective > 0 && tubeID > 0) ?
+    Math.ceil(V_ch_effective / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * 1.5)) : 4;
 
   var dewPoint = calcDewPoint((rhIn / 100) * satPressure(T_in));
   var dewPointValid = !isNaN(dewPoint);
@@ -617,7 +646,7 @@ function runCoilDesign() {
       { label: "总管数", value: totalTubes > 0 ? totalTubes + " 根" : "—" },
       { label: "水回路数", value: circuits + " 回路" },
       { label: "每回路管数", value: tubesPerCircuit > 0 ? tubesPerCircuit + " 根" : "—" },
-      { label: "管内流速 v_w", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s" + (waterVelOk ? " ✅ GB 50736 推荐 1.0~2.0" : " ⚠️ 超出 1.0~2.0 m/s，建议调整回路数") : "—" },
+      { label: "管内流速 v_w", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s — " + waterVelMsg : "—" },
       { label: "管内径", value: fmt(tubeID, 1) + " mm" },
       { label: "总管路长度", value: totalTubeLength > 0 ? fmt(totalTubeLength, 1) + " m" : "—" },
       { label: "每排换热面积(估算)", value: fmt(areaPerRow, 1) + " m²/排（经验值 11 m²/m²迎风面）" },
@@ -632,7 +661,9 @@ function runCoilDesign() {
       { label: "可用面积（结构布置）", value: fmt(areaAvailable, 2) + " m²（= " + fmt(areaPerRow, 2) + " m²/排 × " + coil_rows + "排，含翅片）" },
       { label: "铜管外表面积（参考）", value: fmt(areaTubeOnly, 2) + " m²（= " + totalTubes + "根 × π × φ" + tubeOD + " × " + fmt(W*1000,0) + "mm，仅管子不计翅片）" },
       { label: "面积裕度", value: fmt(areaMargin, 1) + "%", bold: true },
-      { label: "校核结论", value: areaCheck }
+      { label: "校核结论", value: areaCheck },
+      { label: "盘管最大供给冷量", value: maxSupplyCOOLING > 0 ? fmt(maxSupplyCOOLING, 1) + " kW（基于 K=" + fmt(K_coil,1) + " × A=" + fmt(areaAvailable,1) + " × LMTD=" + fmt(LMTD,1) + " / F=" + fmt(F_foul,2) + "）" : "—" },
+      { label: "供给 vs 需求", value: supplyMsg, bold: !coil_ok }
     ] : [
       { label: "校核状态", value: "LMTD 法未计算出有效面积（冷量或温差不足），无法校核" }
     ]}
@@ -659,7 +690,7 @@ function runCoilDesign() {
     { title: "四、冷冻水系统", lines: [
       { label: "冷冻水流量 V_ch", value: fmt(V_ch, 2) + " m³/h" },
       { label: "供回水温差", value: fmt(chwDT, 1) + " ℃" },
-      { label: "管内流速", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s" + (waterVelOk ? " ✅ GB 50736 1.0~2.0" : " ⚠️ 建议调回路数至 " + circuits_rec + " 路(目标 1.5m/s)") : "—" },
+      { label: "管内流速", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s" + (waterVelOk ? " ✅ GB 50736 1.0~2.0" : " ⚠️ " + circuits_rec + " 回路推荐") : "—" },
       { label: "当前回路数", value: circuits + " 路" },
       { label: "推荐回路数", value: circuits_rec + " 路（目标流速 1.5m/s）" },
       { label: "接管口径", value: V_ch > 10 ? "DN50" : V_ch > 4 ? "DN40" : "DN32" },
@@ -679,9 +710,10 @@ function runCoilDesign() {
     { title: "六、设计校核", lines: [
       { label: "迎面风速", value: fmt(v_actual, 2) + " m/s → " + (v_actual >= 2.0 && v_actual <= 2.5 ? "✅ 合格" : "⚠️ 需调整") },
       { label: "排数选择", value: coil_rows + " 排 → " + (Q_coil > 0 ? "✅ 满足负荷要求" : "当前无制冷需求") },
-      { label: "管内流速", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s → " + (waterVelOk ? "✅ 符合 GB 50736 (1.0~2.0 m/s)" : "⚠️ 超出范围，建议调整回路数至 " + circuits_rec + " 路(目标 1.5m/s)") : "—" },
+      { label: "冷量供给校核", value: supplyMsg, bold: (!coil_ok && supplyShortfall > 0) },
+      { label: "管内流速", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s → " + waterVelMsg : "—" },
       { label: "露点温度校核", value: dewPointValid ? ("入口露点约 " + fmt(dewPoint, 1) + "℃，T_coil=" + fmt(T_coil, 1) + "℃ → " + (T_coil < dewPoint ? "✅ 低于露点，可有效除湿" : "⚠️ 高于露点，除湿效果有限")) : "露点计算失败（入口水汽压过低）" },
-      { label: "接管口径", value: "推荐 " + (V_ch > 10 ? "DN50" : V_ch > 4 ? "DN40" : "DN32") + " → 满足流量要求" }
+      { label: "接管口径", value: "推荐 " + (V_ch_effective > 10 ? "DN50" : V_ch_effective > 4 ? "DN40" : "DN32") + " → 满足流量要求" }
     ]}
   ]);
   // 接近温差校核失败时，追加冷冻水优化建议
