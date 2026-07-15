@@ -3004,41 +3004,117 @@ function drawPsychroChart(data) {
 
   var parts = [];
   parts.push('<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#fafcfc"/>');
+
+  // ===== P4.2: 等温线（垂直线，T=-10~50°C 步长5°C）=====
   for (var gT = -10; gT <= 50; gT += 5) {
-    parts.push('<line x1="'+tx(gT)+'" y1="'+mt+'" x2="'+tx(gT)+'" y2="'+(mt+ph)+'" stroke="#e8ecf0" stroke-width="0.5"/>');
+    parts.push('<line x1="'+tx(gT)+'" y1="'+mt+'" x2="'+tx(gT)+'" y2="'+(mt+ph)+'" stroke="#cbd5e0" stroke-width="0.5" stroke-dasharray="2,3"/>');
   }
+  // ===== P4.2: 等湿线（水平线，d=0~40g/kg 步长5g/kg）=====
   for (var gW = 0; gW <= 0.040; gW += 0.005) {
-    parts.push('<line x1="'+ml+'" y1="'+ty(gW)+'" x2="'+(ml+pw)+'" y2="'+ty(gW)+'" stroke="#e8ecf0" stroke-width="0.5"/>');
+    parts.push('<line x1="'+ml+'" y1="'+ty(gW)+'" x2="'+(ml+pw)+'" y2="'+ty(gW)+'" stroke="#cbd5e0" stroke-width="0.5" stroke-dasharray="2,3"/>');
   }
+  // X 轴标签
   parts.push('<text x="'+(ml+pw/2)+'" y="'+(mt+ph+34)+'" text-anchor="middle" font-size="11" fill="#4a5568">干球温度 T (℃)</text>');
   for (var gT2 = -10; gT2 <= 50; gT2 += 10) {
     parts.push('<text x="'+tx(gT2)+'" y="'+(mt+ph+18)+'" text-anchor="middle" font-size="11" fill="#718096">'+gT2+'°C</text>');
   }
+  // Y 轴标尺（左侧）
   for (var gW2 = 0; gW2 <= 0.040; gW2 += 0.005) {
     parts.push('<text x="'+(ml-8)+'" y="'+(ty(gW2)+4)+'" text-anchor="end" font-size="11" fill="#718096">'+(gW2*1000).toFixed(0)+'</text>');
   }
   parts.push('<text x="'+(ml-40)+'" y="'+(mt+ph/2)+'" text-anchor="middle" font-size="11" fill="#4a5568" transform="rotate(-90 '+(ml-40)+','+(mt+ph/2)+')">含湿量 w (g/kg)</text>');
-  var satPath = [];
-  for (var T = T_min; T <= T_max; T += 0.5) {
-    var w_sat = calcHumidityRatio(T, 100, data.P_atm);
-    if (w_sat > W_max) w_sat = W_max;
-    satPath.push((satPath.length===0?'M':'L') + tx(T) + ' ' + ty(w_sat));
+
+  // ===== P4.3: 顶部含湿量 d 标尺 =====
+  for (var gW3 = 0; gW3 <= 0.040; gW3 += 0.005) {
+    var ty_top = mt - 2;
+    var tx_top = ml + (gW3 - W_min) / (W_max - W_min) * pw;
+    parts.push('<line x1="'+tx_top+'" y1="'+(ty_top-4)+'" x2="'+tx_top+'" y2="'+ty_top+'" stroke="#718096" stroke-width="0.5"/>');
+    parts.push('<text x="'+tx_top+'" y="'+(ty_top-8)+'" text-anchor="middle" font-size="8" fill="#718096">'+(gW3*1000).toFixed(0)+'</text>');
   }
-  parts.push('<path d="'+satPath.join(' ')+'" stroke="#718096" stroke-width="2" fill="none"/>');
-  parts.push('<text x="'+tx(45)+'" y="'+ty(calcHumidityRatio(45,100,data.P_atm)-0.001)+'" font-size="10" fill="#718096">RH=100%</text>');
-  var rhLevels = [20,40,60,80];
+  parts.push('<text x="'+(ml+pw/2)+'" y="'+(mt-14)+'" text-anchor="middle" font-size="10" fill="#4a5568">含湿量 d (g/kg干空气)</text>');
+
+  // ===== P4.1: 等焓线（h=const 斜线）=====
+  var hLevels = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120];
+  for (var hi = 0; hi < hLevels.length; hi++) {
+    var h_const = hLevels[hi];
+    var hPath = [];
+    // 从低温到高温扫描，h = 1.006*T + d*(2501 + 1.86*T)
+    for (var T_h = T_min; T_h <= T_max; T_h += 0.5) {
+      var dh = (h_const - 1.006 * T_h);
+      if (dh < 0) continue;
+      var d_h = dh / (2501 + 1.86 * T_h);
+      if (d_h < 0 || d_h > W_max) continue;
+      hPath.push((hPath.length === 0 ? 'M' : 'L') + tx(T_h) + ' ' + ty(d_h));
+    }
+    if (hPath.length > 1) {
+      parts.push('<path d="'+hPath.join(' ')+'" stroke="#a0aec0" stroke-width="0.6" stroke-dasharray="3,3" fill="none"/>');
+      // 在顶部标注 h 值
+      var lastSeg = hPath[hPath.length - 1];
+      var lastPt = lastSeg.split(' ');
+      var hLabelX = parseFloat(lastPt[1]);
+      var hLabelY = parseFloat(lastPt[2]);
+      parts.push('<text x="'+(hLabelX-4)+'" y="'+(hLabelY-2)+'" font-size="8" fill="#718096">'+h_const+'</text>');
+    }
+  }
+
+  // ===== P4.5: 等相对湿度线（10%~90%）=====
+  var rhLevels = [10, 20, 30, 40, 50, 60, 70, 80, 90];
   for (var ri=0; ri<rhLevels.length; ri++) {
     var rh = rhLevels[ri];
     var p = [];
-    for (var T = T_min; T <= T_max; T += 1) {
-      var w_rh = calcHumidityRatio(T, rh, data.P_atm);
+    for (var T_rh = T_min; T_rh <= T_max; T_rh += 1) {
+      var w_rh = calcHumidityRatio(T_rh, rh, data.P_atm);
       if (w_rh > W_max) w_rh = W_max;
-      p.push((p.length===0?'M':'L') + tx(T) + ' ' + ty(w_rh));
+      p.push((p.length===0?'M':'L') + tx(T_rh) + ' ' + ty(w_rh));
     }
     parts.push('<path d="'+p.join(' ')+'" stroke="#cbd5e0" stroke-width="0.8" stroke-dasharray="4,4" fill="none"/>');
     var rhW = calcHumidityRatio(45, rh, data.P_atm);
     if (rhW < W_max) parts.push('<text x="'+tx(45)+'" y="'+(ty(rhW)+3)+'" font-size="9" fill="#a0aec0">RH='+rh+'%</text>');
   }
+
+  // ===== 饱和线 (RH=100%) =====
+  var satPath = [];
+  for (var T_s = T_min; T_s <= T_max; T_s += 0.5) {
+    var w_sat = calcHumidityRatio(T_s, 100, data.P_atm);
+    if (w_sat > W_max) w_sat = W_max;
+    satPath.push((satPath.length===0?'M':'L') + tx(T_s) + ' ' + ty(w_sat));
+  }
+  parts.push('<path d="'+satPath.join(' ')+'" stroke="#4a5568" stroke-width="2" fill="none"/>');
+  parts.push('<text x="'+tx(45)+'" y="'+ty(calcHumidityRatio(45,100,data.P_atm)-0.001)+'" font-size="10" fill="#4a5568">RH=100%</text>');
+
+  // ===== P4.2: 饱和线温度刻度（每1°C短刻度 + 每5°C温度标注）=====
+  for (var T_deg = -5; T_deg <= 50; T_deg += 1) {
+    var w_tick = calcHumidityRatio(T_deg, 100, data.P_atm);
+    if (w_tick > W_max) continue;
+    var xt = tx(T_deg), yt = ty(w_tick);
+    var tickLen = (T_deg % 5 === 0) ? 5 : 3;
+    parts.push('<line x1="'+xt+'" y1="'+(yt-tickLen)+'" x2="'+xt+'" y2="'+(yt+tickLen)+'" stroke="#4a5568" stroke-width="0.5"/>');
+  }
+  // 每5°C温度标注（沿饱和线右侧）
+  for (var T_lab = 0; T_lab <= 45; T_lab += 5) {
+    var w_lab = calcHumidityRatio(T_lab, 100, data.P_atm);
+    if (w_lab > W_max) continue;
+    parts.push('<text x="'+(tx(T_lab)+4)+'" y="'+(ty(w_lab)-4)+'" font-size="8" fill="#4a5568">'+T_lab+'°C</text>');
+  }
+
+  // ===== P4.4: d-t-h 三轴方向示意图（右下角）=====
+  var cx = ml + pw - 55, cy = mt + ph - 55;
+  var r = 28;
+  function compassPt(angleDeg, len) {
+    var rad = angleDeg * Math.PI / 180;
+    return [cx + len * Math.cos(rad), cy - len * Math.sin(rad)];
+  }
+  // 三轴：d（右下 -60°）、t（右 0°）、h（右上 60°）
+  var dPt = compassPt(-60, r);
+  var tPt = compassPt(0, r);
+  var hPt = compassPt(60, r);
+  parts.push('<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+2)+'" fill="rgba(255,255,255,0.85)" stroke="#cbd5e0" stroke-width="0.5"/>');
+  parts.push('<line x1="'+cx+'" y1="'+cy+'" x2="'+dPt[0]+'" y2="'+dPt[1]+'" stroke="#3182ce" stroke-width="1.5" stroke-linecap="round"/>');
+  parts.push('<line x1="'+cx+'" y1="'+cy+'" x2="'+tPt[0]+'" y2="'+tPt[1]+'" stroke="#38a169" stroke-width="1.5" stroke-linecap="round"/>');
+  parts.push('<line x1="'+cx+'" y1="'+cy+'" x2="'+hPt[0]+'" y2="'+hPt[1]+'" stroke="#c05621" stroke-width="1.5" stroke-linecap="round"/>');
+  parts.push('<text x="'+(dPt[0]+4)+'" y="'+(dPt[1]+5)+'" font-size="12" fill="#3182ce" font-weight="bold">d</text>');
+  parts.push('<text x="'+(tPt[0]+4)+'" y="'+(tPt[1]+5)+'" font-size="12" fill="#38a169" font-weight="bold">t</text>');
+  parts.push('<text x="'+(hPt[0]+4)+'" y="'+(hPt[1]-3)+'" font-size="12" fill="#c05621" font-weight="bold">h</text>');
   var x1 = tx(data.tempIn), y1 = ty(data.W_in);
   var x2 = tx(data.tempOut), y2 = ty(data.W_out);
   parts.push('<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#e53e3e" stroke-width="2.5" stroke-dasharray="6,3"/>');
@@ -3066,8 +3142,91 @@ function drawPsychroChart(data) {
   parts.push('<text x="'+ml+'" y="'+(dY+18)+'" font-size="10" fill="#4a5568">工况: '+data.tempIn+'℃/'+data.rhIn+'% → '+data.tempOut+'℃/'+data.rhOut+'% | ṁ='+data.massFlow+' kg/s | P='+fmt(data.P_atm,1)+' kPa</text>');
   parts.push('<text x="'+ml+'" y="'+(dY+32)+'" font-size="10" fill="#4a5568">Δh='+fmt(data.h_in-data.h_out,2)+' kJ/kg | 净制冷='+fmt(data.Q_cooling,2)+' kW | 盘管负荷='+fmt(data.Q_coil_actual||data.Q_cooling,2)+' kW</text>');
   parts.push('<text x="'+ml+'" y="'+(dY+46)+'" font-size="10" font-weight="bold" fill="#2b6cb0">处理类型: '+esc(processType)+'</text>');
-  parts.push('<text x="'+ml+'" y="'+(dY+62)+'" font-size="9" fill="#718096">注：焓湿图基于 GB/T 35226-2017，大气压 P='+fmt(data.P_atm,1)+' kPa。鼠标悬停状态点查看详细参数。</text>');
+  parts.push('<text x="'+ml+'" y="'+(dY+62)+'" font-size="9" fill="#718096">注：焓湿图基于 GB/T 35226-2017，大气压 P='+fmt(data.P_atm,1)+' kPa。鼠标悬停状态点查看详细参数，移动鼠标读取任意点 T/d/h/RH/td 值。</text>');
   svg.innerHTML = parts.join('');
+
+  // ===== P4.8: 十字光标交互（移动鼠标读取任意点状态）=====
+  setupPsychroInteraction(svg, tx, ty, T_min, T_max, W_min, W_max, ml, mt, pw, ph, data.P_atm);
+}
+
+/**
+ * P4.8: 设置焓湿图鼠标交互（十字光标 + 状态读数）
+ * 鼠标在绘图区内移动时，显示十字准线和当前点的 T/d/h/RH/td 值
+ */
+function setupPsychroInteraction(svg, tx, ty, T_min, T_max, W_min, W_max, ml, mt, pw, ph, P_atm) {
+  // 移除旧的事件（防重复绑定）
+  svg.style.position = 'relative';
+  var cursorGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  cursorGroup.setAttribute('id', 'psychro-cursor-group');
+  cursorGroup.setAttribute('style', 'pointer-events:none;');
+  svg.appendChild(cursorGroup);
+
+  var crossX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  crossX.setAttribute('id', 'psychro-cursor-x');
+  crossX.setAttribute('stroke', '#e53e3e');
+  crossX.setAttribute('stroke-width', '0.5');
+  crossX.setAttribute('stroke-dasharray', '4,2');
+  cursorGroup.appendChild(crossX);
+
+  var crossY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  crossY.setAttribute('id', 'psychro-cursor-y');
+  crossY.setAttribute('stroke', '#e53e3e');
+  crossY.setAttribute('stroke-width', '0.5');
+  crossY.setAttribute('stroke-dasharray', '4,2');
+  cursorGroup.appendChild(crossY);
+
+  var tooltip = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  tooltip.setAttribute('id', 'psychro-cursor-tooltip');
+  tooltip.setAttribute('font-size', '10');
+  tooltip.setAttribute('fill', '#e53e3e');
+  tooltip.setAttribute('font-weight', 'bold');
+  cursorGroup.appendChild(tooltip);
+
+  function updateCursor(e) {
+    var rect = svg.getBoundingClientRect();
+    var svgW = 700, svgH = 560;
+    var px = (e.clientX - rect.left) / rect.width * svgW;
+    var py = (e.clientY - rect.top) / rect.height * svgH;
+
+    // 判断是否在绘图区内
+    if (px < ml || px > ml + pw || py < mt || py > mt + ph) {
+      crossX.setAttribute('x1', '0'); crossX.setAttribute('x2', '0');
+      crossY.setAttribute('y1', '0'); crossY.setAttribute('y2', '0');
+      tooltip.textContent = '';
+      return;
+    }
+
+    // 像素 → 状态量
+    var T_read = (px - ml) / pw * (T_max - T_min) + T_min;
+    var W_read = (1 - (py - mt) / ph) * (W_max - W_min) + W_min;
+    if (W_read < 0) W_read = 0;
+
+    // 更新十字线
+    crossX.setAttribute('x1', '' + ml); crossX.setAttribute('x2', '' + (ml + pw));
+    crossX.setAttribute('y1', '' + py); crossX.setAttribute('y2', '' + py);
+    crossY.setAttribute('x1', '' + px); crossY.setAttribute('x2', '' + px);
+    crossY.setAttribute('y1', '' + mt); crossY.setAttribute('y2', '' + (mt + ph));
+
+    // 计算状态参数
+    var P_sat_read = satPressure(T_read);
+    var P_v_read = W_read * P_atm / (0.622 + W_read);
+    var RH_read = (P_sat_read > 0.01) ? (P_v_read / P_sat_read * 100) : 0;
+    RH_read = Math.max(0, Math.min(100, RH_read));
+    var h_read = enthalpy(T_read, W_read);
+    var td_read = calcDewPoint(P_v_read);
+    var tdStr = isNaN(td_read) ? '—' : '' + td_read.toFixed(1) + '°C';
+
+    tooltip.setAttribute('x', '' + (px + 8));
+    tooltip.setAttribute('y', '' + (py - 8));
+    tooltip.textContent = 'T=' + T_read.toFixed(1) + '°C d=' + (W_read * 1000).toFixed(1) + 'g/kg h=' + h_read.toFixed(1) + 'kJ/kg RH=' + RH_read.toFixed(0) + '% td=' + tdStr;
+  }
+
+  svg.addEventListener('mousemove', updateCursor);
+  svg.addEventListener('mouseleave', function() {
+    crossX.setAttribute('x1', '0'); crossX.setAttribute('x2', '0');
+    crossY.setAttribute('y1', '0'); crossY.setAttribute('y2', '0');
+    tooltip.textContent = '';
+  });
 }
 
 /** 导出焓湿图为 SVG 文件 */

@@ -283,7 +283,7 @@ function importFromCalc() {
   var ri = parseFloat(document.getElementById("rhIn").value) || 80;
   var to = parseFloat(document.getElementById("tempOut").value) || 20;
   var ro = parseFloat(document.getElementById("rhOut").value) || 50;
-  var pa = 101.325;
+  var pa = parseFloat(document.getElementById("cd-atmPressure").value) || parseFloat(document.getElementById("atmPressure").value) || 101.325;
 
   var W_in = calcHumidityRatio(ti, ri, pa);
   var W_out = calcHumidityRatio(to, ro, pa);
@@ -358,7 +358,7 @@ function runCoilDesign() {
   var T_out = parseFloat(document.getElementById("cd-tempOut").value) || 20;
   var T_coil = parseFloat(document.getElementById("cd-T_coil").value) || 10;
   var massFlow = parseFloat(document.getElementById("cd-massFlow").value) || 0.5;
-  var pa = 101.325;
+  var pa = parseFloat(document.getElementById("cd-atmPressure").value) || 101.325;
 
   var ep = getEngineeringParams();
   var v_face = ep.v_coil;
@@ -375,6 +375,70 @@ function runCoilDesign() {
   var chwDT = parseFloat(document.getElementById("cd-chwDeltaT").value) || 5;
   var T_chw_in = parseFloat(document.getElementById("cd-chwSupply").value) || 7;
   var T_chw_out = T_chw_in + chwDT;
+
+  // === P1: 校核模式 ===
+  // 校核模式：根据已有盘管几何参数，反算实际能达到的冷量
+  var isCheckMode = (parseInt(document.getElementById("cd-mode").value) || 0) === 1;
+  if (isCheckMode && W > 0 && H > 0 && coil_rows > 0) {
+    // 校核模式下直接使用当前几何参数
+    var tubeSpacing_cm = parseFloat(document.getElementById("cd-tubeSpacing").value) || 38.1;
+    var rowSpacing_cm = parseFloat(document.getElementById("cd-rowSpacing").value) || 33;
+    var circuits_cm = parseInt(document.getElementById("cd-circuits").value) || 4;
+    var tubeOD_cm = parseFloat(document.getElementById("cd-tubeOD").value) || 16;
+    var tubeWT_cm = tubeOD_cm >= 14 ? 0.5 : tubeOD_cm >= 11 ? 0.4 : tubeOD_cm >= 7.5 ? 0.35 : 0.3;
+    var tubeID_cm = (tubeOD_cm - 2 * tubeWT_cm) / 1000;
+    var tubesPerRow_cm = H > 0 ? Math.floor(H * 1000 / tubeSpacing_cm) : 0;
+    var totalTubes_cm = tubesPerRow_cm * coil_rows;
+    if (totalTubes_cm > 0 && tubeID_cm > 0) {
+      var totalTubeLen_cm = totalTubes_cm * W;  // 总管长 m
+      var areaInner_cm = totalTubes_cm * Math.PI * tubeID_cm * W;  // 内表面积 m²
+      var areaOuter_cm = totalTubes_cm * Math.PI * (tubeOD_cm / 1000) * W;  // 外表面积 m²
+      var A_face_cm = W * H;  // 迎风面积 m²
+      var v_actual_cm = vol_m3s > 0 ? vol_m3s / A_face_cm : v_face;
+      // 管内流速（按回路数分流）
+      var V_ch_cm = chwDT > 0 ? Q_coil / (4.187 * chwDT) / 1000 * 3600 : 0;
+      var w_cm = (V_ch_cm > 0 && tubeID_cm > 0 && circuits_cm > 0) ?
+        V_ch_cm / 3600 / (Math.PI * tubeID_cm * tubeID_cm / 4 * circuits_cm) : 1.0;
+      w_cm = Math.max(0.5, Math.min(3.0, w_cm));
+      // 计算传热系数 α_air (用当前几何)
+      var alphaAir_cm = v_actual_cm > 0 ? calcAlphaAir(v_actual_cm, 0.0035, 1.0, (T_in + T_out) / 2) : 0;
+      var alphaWater_cm = tubeID_cm > 0 && w_cm > 0 ? calcAlphaWater(w_cm, tubeID_cm, (T_chw_in + T_chw_out) / 2) : 0;
+      // 翅片效率
+      var finEff_cm = calcFinEfficiency(alphaAir_cm, 237, 0.00013,
+        tubeOD_cm / 1000, tubeSpacing_cm / 1000, rowSpacing_cm / 1000, 0.0025, 1);
+      var K_cm = 1 / (1/(alphaAir_cm * finEff_cm.etaSurface) + (tubeOD_cm/1000 - tubeID_cm) / (2 * 393) + 0.0002 + 1/alphaWater_cm);
+      // NTU 法估算实际换热量
+      var cp_air = 1.006;
+      var cp_water = 4.187;
+      var m_air = massFlow || 0.5;
+      var m_water = chwDT > 0 ? Q_coil / (cp_water * chwDT) : 1.0;
+      m_water = Math.max(m_water, 0.1);
+      var C_min = Math.min(m_air * cp_air, m_water * cp_water);
+      var C_max = Math.max(m_air * cp_air, m_water * cp_water);
+      var NTU = K_cm * areaOuter_cm * 1.1 / C_min;  // 1.1 = 污垢系数
+      var CR = C_min / C_max;
+      // 混合流 ε-NTU
+      var eps_ntu;
+      if (Math.abs(CR - 1) < 0.001) {
+        eps_ntu = NTU / (1 + NTU);
+      } else {
+        eps_ntu = (1 - Math.exp(-NTU * (1 - CR))) / (1 - CR * Math.exp(-NTU * (1 - CR)));
+      }
+      var Q_actual = eps_ntu * C_min * ((T_in + T_out) / 2 - (T_chw_in + T_chw_out) / 2);
+      // 出口温度估算
+      var T_out_actual = T_in - Q_actual / (m_air * cp_air);
+      // 出口含湿量（假设沿饱和线）
+      var xi_check = calcXi(enthalpy(T_in, calcHumidityRatio(T_in, rhIn, pa)),
+        enthalpy(T_out_actual, calcHumidityRatio(T_out_actual, 100, pa)), T_in, T_out_actual);
+      // 校核结果：替换 Q_coil 为实际值，后续 LMTD 用实际值
+      Q_coil = Math.max(0, Q_actual);
+      // 输出校核信息到临时变量（后续被报告使用）
+      var checkInfo = "✅ 校核完成：实际冷量 " + fmt(Q_actual, 2) + " kW（目标 " + fmt(parseFloat(document.getElementById("cd-Q_coil").value)||0, 2) + " kW），出口温度" + fmt(T_out_actual, 1) + "℃";
+      document.getElementById("cd-Q_coil").value = fmt(Q_coil, 2);
+      document.getElementById("cd-T_coil").value = fmt(T_out_actual, 1);
+      setStatusBar("校核模式：已计算实际冷量 " + fmt(Q_actual, 2) + " kW", "");
+    }
+  }
 
   // --- 盘管面积热力学计算（LMTD 法 + 焓差法，依据 GB/T 14294-2026 / 《实用供热空调设计手册》）---
   // 计算空气状态
@@ -556,13 +620,52 @@ function runCoilDesign() {
   var circuits_rec = (V_ch_effective > 0 && tubeID > 0) ?
     Math.ceil(V_ch_effective / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * 1.5)) : 4;
 
+  // === P0: 翅片效率计算（Schmidt 公式）===
+  var alphaAir_coil = v_face > 0 ? calcAlphaAir(v_face, 0.0035, xi_lmtd, (T_in + T_out) / 2) : 0;
+  var lambdaFin_coil = 237;  // 铝翅片 237 W/(m·K)
+  var deltaFin_coil = 0.00013;  // 0.13mm（典型值）
+  var finPitch_coil = fin_spacing / 1000;  // mm→m
+  var finEff = calcFinEfficiency(alphaAir_coil, lambdaFin_coil, deltaFin_coil,
+    tubeOD / 1000, tubeSpacing / 1000, rowSpacing / 1000, finPitch_coil, 1);
+  var etaFin = finEff.etaFin;
+  var etaSurface = finEff.etaSurface;
+  var etaFinMsg = (etaFin > 0 && etaFin < 0.99) ? "" : "（翅片效率接近1，翅片有效性高）";
+
+  // === P0: 空气侧压降计算 ===
+  var rho_air_coil = vol_m3s > 0 && A_face > 0 ? vol_m3s / v_face / A_face : 1.2;
+  // 用进口密度近似
+  var W_in_rho = calcHumidityRatio(T_in, rhIn, pa);
+  rho_air_coil = rhoMoistAir(pa, T_in, W_in_rho);
+  var finType_calc = parseInt(document.getElementById("cd-finType").value) || 0;
+  var deltaP_air = calcAirSideDrop(v_actual, rho_air_coil, coil_rows, xi_lmtd, finType_calc, 0.5);
+  var deltaP_air_dry = calcAirSideDrop(v_actual, rho_air_coil, coil_rows, 1.0, finType_calc, 0.5);
+
+  // === P0: 水侧压降计算 ===
+  var L_circuit = W * 2;  // 近似：单回路管长 = 宽度 × 来回
+  if (circuits > 0) L_circuit = totalTubes / circuits * W * 2;  // 更准确
+  var waterDrop = waterVel > 0 ? calcWaterSideDrop(waterVel, tubeID / 1000, L_circuit, (T_chw_in + T_chw_out) / 2) : { deltaP: 0, deltaP_mPa: 0, f: 0, Re: 0 };
+  var deltaP_water = waterDrop.deltaP;
+  var deltaP_water_kPa = waterDrop.deltaP_mPa;
+
   var dewPoint = calcDewPoint((rhIn / 100) * satPressure(T_in));
   var dewPointValid = !isNaN(dewPoint);
+
+  // === P2: 分项合成 K 值法 ===
+  var alphaAir_precise = v_face > 0 ? calcAlphaAir(v_face, 0.0035, xi_lmtd, (T_in + T_out) / 2) : 0;
+  var alphaWater_precise = tubeID > 0 && waterVel > 0 ? calcAlphaWater(waterVel, tubeID / 1000, (T_chw_in + T_chw_out) / 2) : 0;
+  var K_precise = (alphaAir_precise > 0 && alphaWater_precise > 0)
+    ? calcCoilKPrecise(alphaAir_precise, alphaWater_precise, etaSurface,
+        tubeOD / 1000, tubeID / 1000, 393, 0.0002, xi_lmtd)
+    : 0;
+  var K_diff = K_coil > 0 && K_precise > 0 ? Math.abs(K_precise - K_coil) / K_coil * 100 : 0;
+  var K_agree = K_diff <= 15 ? "✅ 一致性良好（差异 " + fmt(K_diff, 1) + "%）" : "⚠️ 差异较大（" + fmt(K_diff, 1) + "%），建议使用分项合成法作为参考";
 
   // 两法排数差异
   var rowsAgree = (rows_calc > 0 && cf.valid) ? Math.abs(rows_calc - cf.rows) <= 2 : null;
 
-  document.getElementById("cd-coil-result").innerHTML = buildDesignReport("❄ 表冷器详细设计", [
+  var modeLabel = isCheckMode ? "🔍 校核模式" : "❄ 设计模式";
+  var modeDesc = isCheckMode ? "（根据已有盘管几何校核实际冷量：W×H=" + fmt(W*1000,0) + "×" + fmt(H*1000,0) + "mm，排数=" + coil_rows + "，回路=" + circuits + "）" : "";
+  document.getElementById("cd-coil-result").innerHTML = buildDesignReport(modeLabel + " 表冷器" + modeDesc, [
     { title: "一、设计输入参数", lines: [
       { label: "设计制冷负荷 Q_coil", value: fmt(Q_coil, 2) + " kW" },
       { label: "处理风量", value: fmt(volFlow, 0) + " m³/h (" + fmt(vol_m3s, 3) + " m³/s)" },
@@ -592,7 +695,9 @@ function runCoilDesign() {
       { label: "ΔT₂（空气出−水入）", value: fmt(dT2, 2) + " ℃" },
       { label: "对数平均温差 LMTD", value: LMTD > 0 ? fmt(LMTD, 2) + " ℃" : "—（温差不足，无法计算）" },
       { label: "析湿系数 ξ", value: xi_lmtd > 1.01 ? fmt(xi_lmtd, 3) + "（湿工况）" : "1.000（干工况）" },
-      { label: "传热系数 K（计算值）", value: K_coil > 0 ? fmt(K_coil, 1) + " W/(m²·K)（迎面风速" + fmt(v_face,1) + " m/s, ξ=" + fmt(xi_lmtd,2) + "）" : "45 W/(m²·K)（默认）" },
+      { label: "传热系数 K（经验公式）", value: K_coil > 0 ? fmt(K_coil, 1) + " W/(m²·K)（迎面风速" + fmt(v_face,1) + " m/s, ξ=" + fmt(xi_lmtd,2) + "）" : "45 W/(m²·K)（默认）" },
+      { label: "传热系数 K（分项合成法）", value: K_precise > 0 ? fmt(K_precise, 1) + " W/(m²·K)（α_air=" + fmt(alphaAir_precise, 1) + ", α_water=" + fmt(alphaWater_precise, 1) + ", η_s=" + fmt(etaSurface*100, 1) + "%）" : "—（数据不足，需α_air和α_water均>0）" },
+      { label: "两法对照", value: (K_coil > 0 && K_precise > 0) ? K_agree : "—" },
       { label: "对数平均焓差 Δhm（湿工况）", value: dh_m > 0 ? fmt(dh_m, 2) + " kJ/kg" : "—" },
       { label: "污垢系数 F_foul", value: "1.10" },
       { label: "表冷器负荷(输入) Q_coil", value: fmt(Q_coil, 2) + " kW（含潜热）" },
@@ -666,6 +771,22 @@ function runCoilDesign() {
       { label: "供给 vs 需求", value: supplyMsg, bold: !coil_ok }
     ] : [
       { label: "校核状态", value: "LMTD 法未计算出有效面积（冷量或温差不足），无法校核" }
+    ]}
+  ]);
+  // === P0: 新增翅片效率与压降计算结果 ===
+  document.getElementById("cd-coil-result").innerHTML += buildDesignReport("", [
+    { title: "三-4.5、翅片效率与压降计算", lines: [
+      { label: "空气侧换热系数 α_air", value: fmt(alphaAir_coil, 2) + " W/(m²·K)（迎面风速 " + fmt(v_actual, 2) + "m/s, 析湿系数 ξ=" + fmt(xi_lmtd, 3) + "）" },
+      { label: "翅片效率 η_f（Schmidt 公式）", value: fmt(etaFin * 100, 1) + "% " + etaFinMsg },
+      { label: "表面效率 η_s = 1−A_f/A_total·(1−η_f)", value: fmt(etaSurface * 100, 1) + "%" },
+      { label: "翅片面积占比 A_f/A_total", value: finEff.Atotal > 0 ? fmt(finEff.Afin / finEff.Atotal * 100, 1) + "%" : "—" },
+      { label: "空气侧压降 ΔP_air", value: fmt(deltaP_air, 0) + " Pa（干工况 " + fmt(deltaP_air_dry, 0) + " Pa，湿工况修正系数 " + fmt(Math.pow(xi_lmtd, 0.6), 3) + "）", bold: true },
+      { label: "平均每排压降", value: coil_rows > 0 ? fmt(deltaP_air / coil_rows, 0) + " Pa/排" : "—" },
+      { label: "管内流速 v_w", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s" : "—" },
+      { label: "水侧摩擦因子 f（Blasius）", value: fmt(waterDrop.f, 4) },
+      { label: "水侧沿程阻力", value: deltaP_water > 0 ? fmt(waterDrop.deltaP_friction, 0) + " Pa（U弯 " + Math.floor(L_circuit / 0.5 / 2) + " 个）" : "—" },
+      { label: "水侧局部阻力", value: deltaP_water > 0 ? fmt(waterDrop.deltaP_local, 0) + " Pa（集水管进出+U弯）" : "—" },
+      { label: "水侧总压降 ΔP_water", value: deltaP_water > 0 ? fmt(deltaP_water, 0) + " Pa（" + fmt(deltaP_water_kPa, 2) + " kPa）" : "—", bold: true }
     ]}
   ]);
   // 插入表冷器外形尺寸

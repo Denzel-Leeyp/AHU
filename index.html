@@ -295,6 +295,13 @@
           <div class="form-group"><label for="cd-rhIn">入口相对湿度 (%)</label><input type="number" id="cd-rhIn" step="1" value="80" oninput="syncFromDesign()"></div>
           <div class="form-group"><label for="cd-tempOut">出口温度 (℃)</label><input type="number" id="cd-tempOut" step="0.5" value="20" oninput="syncFromDesign()"></div>
           <div class="form-group"><label for="cd-rhOut">出口相对湿度 (%)</label><input type="number" id="cd-rhOut" step="1" value="50" oninput="syncFromDesign()"></div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label for="cd-mode">计算模式</label>
+            <select id="cd-mode" onchange="runCoilDesign()" style="width:100%;padding:4px;border:1px solid #cbd5e0;border-radius:4px;">
+              <option value="0">设计模式 — 根据负荷/排数设计盘管尺寸</option>
+              <option value="1">校核模式 — 根据已有盘管几何校核实际冷量</option>
+            </select>
+          </div>
           <div class="design-params-section">
             <h3 style="font-size:0.9rem;color:#2b6cb0;margin:0 0 8px 0;">设计负荷参数（可手动修改）</h3>
             <div class="form-group"><label for="cd-Q_coil">表冷器负荷 (kW)</label><input type="number" id="cd-Q_coil" step="0.1" value="0"></div>
@@ -305,6 +312,7 @@
             <div class="form-group"><label for="cd-coilRH">盘管出口相对湿度（再热前, %）</label><input type="number" id="cd-coilRH" min="85" max="99" step="1" value="95" oninput="syncFromDesign()"></div>
             <div class="form-group"><label for="cd-chwDeltaT">冷冻水温差 (℃)</label><input type="number" id="cd-chwDeltaT" min="3" max="10" step="0.5" value="5" oninput="syncFromDesign()"></div>
             <div class="form-group"><label for="cd-volFlow">处理风量 (m³/h)</label><input type="number" id="cd-volFlow" step="10" value="0"></div>
+            <div class="form-group"><label for="cd-atmPressure">大气压力 (kPa)</label><input type="number" id="cd-atmPressure" min="80" max="110" step="0.1" value="101.325" oninput="syncFromDesign()"></div>
             <div class="form-group"><label for="cd-tubeSpacing">管间距 (mm)</label><input type="number" id="cd-tubeSpacing" min="10" max="60" step="0.1" value="38.1"></div>
             <div class="form-group"><label for="cd-rowSpacing">排距 (mm)</label><input type="number" id="cd-rowSpacing" min="10" max="60" step="0.1" value="33"></div>
             <div class="form-group"><label for="cd-circuits">水回路数</label><input type="number" id="cd-circuits" min="1" max="100" step="1" value="4"></div>
