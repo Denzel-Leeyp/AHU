@@ -321,6 +321,51 @@ function waterProps(T) {
 }
 
 /**
+ * 乙二醇水溶液物性参数
+ * 参考：ASHRAE Handbook — Fundamentals, Thermophysical Properties of Refrigerants
+ *       乙二醇水溶液密度、粘度、导热系数、比热的多项式拟合
+ * @param {number} T — 温度 (℃)
+ * @param {number} conc — 乙二醇体积浓度 0~60%
+ * @returns {object} { lambda: 导热系数 W/(m·K), nu: 运动粘度 m²/s, Pr: 普朗特数, rho: 密度 kg/m³, cp: 比热 kJ/(kg·K) }
+ */
+function glycolWaterProps(T, conc) {
+  conc = Math.max(0, Math.min(60, conc || 0));
+  if (conc <= 0) return waterProps(T);  // 纯水回退
+
+  var T_K = T + 273.15;
+  var c = conc / 100;  // 体积分数小数
+
+  // 密度：rho = rho_water * (1 - 0.01 * c * 0.5) (简化)
+  var rho_w = 1000 - 0.2 * (T - 4) * (T - 4);
+  var rho_g = 1115 - 0.7 * (T - 20);
+  var rho = rho_w * (1 - c) + rho_g * c;
+
+  // 比热 cp (kJ/kg·K)
+  var cp_w = 4.187;
+  var cp_g = 2.43 + 0.004 * T;
+  var cp = cp_w * (1 - c) + cp_g * c;
+
+  // 导热系数 lambda (W/m·K)
+  var lam_w = 0.569 + 1.9e-3 * T - 1.0e-5 * T * T;
+  var lam_g = 0.258 - 3.0e-4 * T;
+  var lam = lam_w * (1 - c) + lam_g * c;
+
+  // 运动粘度 nu (m²/s) — 乙二醇的粘度远高于水
+  var nu_w = 1.78e-6 - 5.2e-8 * T + 6.5e-10 * T * T;
+  // 乙二醇粘度（约 20 倍于水），简化：n_g = n_w * (1 + 15 * c)
+  var nu_g = nu_w * (1 + 20 * c);
+  // 混合物的粘度用对数混合律
+  var nu = Math.exp(Math.log(nu_w) * (1 - c) + Math.log(nu_g) * c);
+  nu = Math.max(nu, 2.0e-7);
+
+  var Pr = nu * rho * cp / lam;
+  if (lam < 0.01) lam = 0.3;
+  Pr = Math.max(2.0, Math.min(50.0, Pr));
+
+  return { lambda: lam, nu: nu, Pr: Pr, rho: rho, cp: cp };
+}
+
+/**
  * 空气侧换热系数 αa（Dittus-Boelter 型式，针对翅片管束校正）
  * 湿工况下空气侧换热需乘以析湿系数 ξ
  * 参考：《实用供热空调设计手册》表冷器热工计算
