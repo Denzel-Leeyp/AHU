@@ -556,6 +556,33 @@ function runCoilDesign() {
   var circuits_rec = (V_ch_effective > 0 && tubeID > 0) ?
     Math.ceil(V_ch_effective / 3600 / (Math.PI * (tubeID/1000) * (tubeID/1000) / 4 * 1.5)) : 4;
 
+  // === P0: 翅片效率计算（Schmidt 公式）===
+  var alphaAir_coil = v_face > 0 ? calcAlphaAir(v_face, 0.0035, xi_lmtd, (T_in + T_out) / 2) : 0;
+  var lambdaFin_coil = 237;  // 铝翅片 237 W/(m·K)
+  var deltaFin_coil = 0.00013;  // 0.13mm（典型值）
+  var finPitch_coil = fin_spacing / 1000;  // mm→m
+  var finEff = calcFinEfficiency(alphaAir_coil, lambdaFin_coil, deltaFin_coil,
+    tubeOD / 1000, tubeSpacing / 1000, rowSpacing / 1000, finPitch_coil, 1);
+  var etaFin = finEff.etaFin;
+  var etaSurface = finEff.etaSurface;
+  var etaFinMsg = (etaFin > 0 && etaFin < 0.99) ? "" : "（翅片效率接近1，翅片有效性高）";
+
+  // === P0: 空气侧压降计算 ===
+  var rho_air_coil = vol_m3s > 0 && A_face > 0 ? vol_m3s / v_face / A_face : 1.2;
+  // 用进口密度近似
+  var W_in_rho = calcHumidityRatio(T_in, rhIn, pa);
+  rho_air_coil = rhoMoistAir(pa, T_in, W_in_rho);
+  var finType_calc = parseInt(document.getElementById("cd-finType").value) || 0;
+  var deltaP_air = calcAirSideDrop(v_actual, rho_air_coil, coil_rows, xi_lmtd, finType_calc, 0.5);
+  var deltaP_air_dry = calcAirSideDrop(v_actual, rho_air_coil, coil_rows, 1.0, finType_calc, 0.5);
+
+  // === P0: 水侧压降计算 ===
+  var L_circuit = W * 2;  // 近似：单回路管长 = 宽度 × 来回
+  if (circuits > 0) L_circuit = totalTubes / circuits * W * 2;  // 更准确
+  var waterDrop = waterVel > 0 ? calcWaterSideDrop(waterVel, tubeID / 1000, L_circuit, (T_chw_in + T_chw_out) / 2) : { deltaP: 0, deltaP_mPa: 0, f: 0, Re: 0 };
+  var deltaP_water = waterDrop.deltaP;
+  var deltaP_water_kPa = waterDrop.deltaP_mPa;
+
   var dewPoint = calcDewPoint((rhIn / 100) * satPressure(T_in));
   var dewPointValid = !isNaN(dewPoint);
 
@@ -666,6 +693,22 @@ function runCoilDesign() {
       { label: "供给 vs 需求", value: supplyMsg, bold: !coil_ok }
     ] : [
       { label: "校核状态", value: "LMTD 法未计算出有效面积（冷量或温差不足），无法校核" }
+    ]}
+  ]);
+  // === P0: 新增翅片效率与压降计算结果 ===
+  document.getElementById("cd-coil-result").innerHTML += buildDesignReport("", [
+    { title: "三-4.5、翅片效率与压降计算", lines: [
+      { label: "空气侧换热系数 α_air", value: fmt(alphaAir_coil, 2) + " W/(m²·K)（迎面风速 " + fmt(v_actual, 2) + "m/s, 析湿系数 ξ=" + fmt(xi_lmtd, 3) + "）" },
+      { label: "翅片效率 η_f（Schmidt 公式）", value: fmt(etaFin * 100, 1) + "% " + etaFinMsg },
+      { label: "表面效率 η_s = 1−A_f/A_total·(1−η_f)", value: fmt(etaSurface * 100, 1) + "%" },
+      { label: "翅片面积占比 A_f/A_total", value: finEff.Atotal > 0 ? fmt(finEff.Afin / finEff.Atotal * 100, 1) + "%" : "—" },
+      { label: "空气侧压降 ΔP_air", value: fmt(deltaP_air, 0) + " Pa（干工况 " + fmt(deltaP_air_dry, 0) + " Pa，湿工况修正系数 " + fmt(Math.pow(xi_lmtd, 0.6), 3) + "）", bold: true },
+      { label: "平均每排压降", value: coil_rows > 0 ? fmt(deltaP_air / coil_rows, 0) + " Pa/排" : "—" },
+      { label: "管内流速 v_w", value: waterVel > 0 ? fmt(waterVel, 2) + " m/s" : "—" },
+      { label: "水侧摩擦因子 f（Blasius）", value: fmt(waterDrop.f, 4) },
+      { label: "水侧沿程阻力", value: deltaP_water > 0 ? fmt(waterDrop.deltaP_friction, 0) + " Pa（U弯 " + Math.floor(L_circuit / 0.5 / 2) + " 个）" : "—" },
+      { label: "水侧局部阻力", value: deltaP_water > 0 ? fmt(waterDrop.deltaP_local, 0) + " Pa（集水管进出+U弯）" : "—" },
+      { label: "水侧总压降 ΔP_water", value: deltaP_water > 0 ? fmt(deltaP_water, 0) + " Pa（" + fmt(deltaP_water_kPa, 2) + " kPa）" : "—", bold: true }
     ]}
   ]);
   // 插入表冷器外形尺寸

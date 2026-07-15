@@ -454,3 +454,171 @@ function calcLogMeanEnthalpy(h1, h2, hb1, hb2) {
   if (Math.abs(dh1 - dh2) < 0.001) return dh1;
   return (dh1 - dh2) / Math.log(dh1 / dh2);
 }
+
+/**
+ * 翅片效率计算（Schmidt 公式）
+ * 适用于圆管翅片（连续翅片/环形翅片）
+ * 参考：Schmidt, T.E. "Heat Transfer Calculations for Extended Surfaces"
+ *       ASHRAE Handbook — HVAC Systems and Equipment
+ *
+ * @param {number} alphaAir — 空气侧换热系数 W/(m²·K)
+ * @param {number} lambdaFin — 翅片导热系数 W/(m·K)（铝≈237，铜≈398）
+ * @param {number} deltaFin — 翅片厚度 m（典型 0.00012~0.00015）
+ * @param {number} tubeOD — 管外径 m
+ * @param {number} tubeSpacing — 垂直气流方向管间距 m
+ * @param {number} rowSpacing — 气流方向（排）管间距 m
+ * @param {number} finPitch — 翅片节距 m（典型 0.002~0.0035）
+ * @param {number} [arrangement] — 0=顺排 1=叉排，默认 1
+ * @returns {object} { etaFin: 翅片效率, etaSurface: 表面效率, Afin: 翅片面积 m²/m, Aprime: 裸管面积 m²/m, Atotal: 总外表面积 m²/m }
+ */
+function calcFinEfficiency(alphaAir, lambdaFin, deltaFin, tubeOD, tubeSpacing, rowSpacing, finPitch, arrangement) {
+  arrangement = (arrangement === 0) ? 0 : 1;
+  var D_o = tubeOD;
+  var S_t = tubeSpacing;       // 垂直气流管间距
+  var S_l = rowSpacing;        // 平行气流管间距
+  var P_f = finPitch;           // 翅片节距
+  var delta_f = deltaFin;
+  var lambda_f = lambdaFin;
+  var alpha = alphaAir;
+
+  // 当量直径 D_e（Schmidt 公式）
+  var A1 = S_t * S_l;           // 单管占据面积
+  var A_tube = Math.PI * D_o * D_o / 4;
+  var L_f;  // 等效翅片长度
+  var D_e;
+
+  if (arrangement === 1) {
+    // 叉排（错排）：D_e = 1.27 * sqrt(S_t * S_l - pi * D_o^2 / 4) / 2
+    D_e = Math.sqrt(4 * (S_t * S_l - A_tube) / Math.PI);
+    L_f = (D_e - D_o) / 2 * (1 + 0.35 * Math.log(D_e / D_o));
+  } else {
+    // 顺排
+    var S_d = Math.sqrt(S_t * S_t + S_l * S_l);
+    D_e = Math.sqrt(4 * (S_t * S_l - A_tube) / Math.PI);
+    L_f = (D_e - D_o) / 2;
+  }
+  if (D_e <= D_o || L_f <= 0) return { etaFin: 1, etaSurface: 1, Afin: 0, Aprime: 0, Atotal: 0 };
+
+  var m_val = Math.sqrt(2 * alpha / (lambda_f * delta_f));
+  var mL = m_val * L_f;
+  if (mL > 10) mL = 10;  // 防止数值溢出
+  var etaFin = Math.tanh(mL) / mL;
+  if (isNaN(etaFin) || etaFin > 1) etaFin = 1;
+
+  // 单位长度（每米管长）的翅片面积
+  var finsPerMeter = 1 / P_f;
+  // 单翅片面积（两面）≈ 2 * (D_e^2 - D_o^2) * PI / 4
+  var AfinPerFin = 2 * (Math.PI / 4 * (D_e * D_e - D_o * D_o));
+  // 但实际连续翅片面积计算更复杂，做简化：
+  // 单位管长的总外表面积 = 翅片面积 + 裸管面积
+  var Afin = finsPerMeter * (A1 - A_tube) * 2;  // 每米翅片面积，两侧
+  var Aprime = (1 - finsPerMeter * delta_f) * Math.PI * D_o;  // 每米裸管面积
+  // 修正：对于连续翅片，需考虑翅片节距和厚度
+  // 实际单位长度总外表面积 ≈ (Afin + Aprime)
+  // 或更精确的：Atotal = (1 - delta_f / P_f) * pi * D_o * 1m + (A1 - pi*D_o^2/4) * 2 / P_f * 1m
+  Atotal = Afin + Aprime;
+  if (Atotal <= 0) return { etaFin: 1, etaSurface: 1, Afin: 0, Aprime: 0, Atotal: 0 };
+
+  var etaSurface = 1 - Afin / Atotal * (1 - etaFin);
+  if (isNaN(etaSurface) || etaSurface > 1) etaSurface = 1;
+  if (etaSurface < 0) etaSurface = 0;
+
+  return { etaFin: etaFin, etaSurface: etaSurface, Afin: Afin, Aprime: Aprime, Atotal: Atotal };
+}
+
+/**
+ * 空气侧压降计算（翅片管束经验关联式）
+ * 参考：ESCOA / HTRI 翅片管束压降关联式 + 工程简化
+ * @param {number} vy — 迎面风速 m/s
+ * @param {number} rho — 空气密度 kg/m³
+ * @param {number} nRows — 管排数
+ * @param {number} [xi] — 析湿系数（>1=湿工况，默认1.0=干工况）
+ * @param {number} [finType] — 翅片类型 0=百叶窗 1=正弦波 2=平翅
+ * @param {number} [sigma] — 最小流通面积比（默认0.5）
+ * @returns {number} 空气侧压降 Pa
+ */
+function calcAirSideDrop(vy, rho, nRows, xi, finType, sigma) {
+  xi = (xi != null) ? Math.max(1.0, xi) : 1.0;
+  finType = finType || 0;
+  sigma = sigma || 0.5;
+
+  var G = rho * vy / sigma;  // 质量流速 kg/(m²·s)
+  var de = 0.0035;           // 当量直径 m（典型值）
+  var nu = 1.5e-5;           // 空气运动粘度 m²/s（近似值）
+  var Re = vy * de / nu;
+  if (Re < 100) Re = 100;
+
+  // 摩擦因子 f（与翅片类型相关）
+  var f;
+  if (finType === 0) {
+    // 百叶窗翅片：f = 1.75 * Re^(-0.26)
+    f = 1.75 * Math.pow(Re, -0.26);
+  } else if (finType === 1) {
+    // 正弦波翅片：f = 0.23 * Re^(-0.16)
+    f = 0.23 * Math.pow(Re, -0.16);
+  } else {
+    // 平翅片：f = 0.50 * Re^(-0.25)
+    f = 0.50 * Math.pow(Re, -0.25);
+  }
+
+  // 湿工况修正
+  var wetFactor = Math.pow(xi, 0.6);  // 析水增加阻力
+
+  // ΔP = f * (G² / (2*rho)) * N * wetFactor
+  var deltaP = f * (G * G / (2 * rho)) * nRows * wetFactor;
+
+  // 物理约束：最小压降 5 Pa/排
+  deltaP = Math.max(deltaP, 5 * nRows);
+  return deltaP;
+}
+
+/**
+ * 水侧压降计算（Darcy-Weisbach + 局部阻力）
+ * 参考：Darcy-Weisbach 公式 + Colebrook 摩擦因子
+ *       Blasius 简化（4000<Re<10⁵）
+ * @param {number} w — 管内流速 m/s
+ * @param {number} di — 管内径 m
+ * @param {number} L — 单回路有效管长 m（≈ 宽度 W × 回路转弯次数）
+ * @param {number} [T_w] — 水温 ℃，用于物性，默认 10℃
+ * @param {number} [nBends] — U 弯数量，默认 L/di 简化
+ * @returns {object} { deltaP: Pa, f: 摩擦因子, Re: 雷诺数, deltaP_mPa: 毫巴 }
+ */
+function calcWaterSideDrop(w, di, L, T_w, nBends) {
+  T_w = (T_w != null) ? T_w : 10;
+  var props = waterProps(T_w);
+  var Re = w * di / props.nu;
+  if (Re < 100) Re = 100;
+
+  // 摩擦因子 f — Blasius 简化（湍流）或 64/Re（层流）
+  var f;
+  if (Re < 2300) {
+    f = 64 / Re;
+  } else if (Re < 1e5) {
+    f = 0.3164 / Math.pow(Re, 0.25);  // Blasius
+  } else {
+    f = 0.184 / Math.pow(Re, 0.2);    // Prandtl-von Kármán
+  }
+
+  // 沿程阻力：ΔP = f * (L/di) * (rho * w² / 2)
+  var rho_water = 1000;  // kg/m³，近似
+  var deltaP_friction = f * (L / di) * (rho_water * w * w / 2);
+
+  // 局部阻力：U 弯 + 集水管进出
+  nBends = nBends || Math.max(2, Math.floor(L / 0.5));
+  var zeta_bend = 2.0;     // 每个 U 弯 ξ ≈ 2.0
+  var zeta_header_in = 1.5;  // 集水管进口
+  var zeta_header_out = 1.5; // 集水管出口
+  var zeta_total = nBends * zeta_bend + zeta_header_in + zeta_header_out;
+  var deltaP_local = zeta_total * (rho_water * w * w / 2);
+
+  var deltaP_total = deltaP_friction + deltaP_local;
+
+  return {
+    deltaP: deltaP_total,           // Pa
+    deltaP_mPa: deltaP_total / 1000, // kPa
+    f: f,
+    Re: Re,
+    deltaP_friction: deltaP_friction,
+    deltaP_local: deltaP_local
+  };
+}
