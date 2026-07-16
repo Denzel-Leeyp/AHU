@@ -1247,15 +1247,39 @@ function runHumidifierDesign() {
     powerNote = "等焓加湿：无电热耗，仅维持水循环，最节能。";
   }
 
-  // ===== 等焓加湿送风温度下降估算 =====
-  var adiabLines = [];
-  if (isAdiabatic && deltaW > 0) {
-    var h_before = enthalpy(T_out, W_in);
-    var T_post = tempFromEnthalpyAndW(h_before, W_out);
-    var dT = T_out - T_post;
-    adiabLines.push({ label: "加湿前空气状态", value: fmt(T_out, 1) + "℃ / " + fmt(W_in * 1000, 2) + " g/kg（等焓过程起点）" });
-    adiabLines.push({ label: "加湿后送风温度", value: fmt(T_post, 1) + "℃（下降 " + fmt(dT, 1) + "℃）" });
-    adiabLines.push({ label: "工艺提示", value: "等焓加湿使送风降温 " + fmt(dT, 1) + "℃；若要维持 " + fmt(T_out, 1) + "℃ 不变，需将加湿前空气再热提高 " + fmt(dT, 1) + "℃。" });
+  // ===== 温度影响分析（按加湿方式分别建模）=====
+  var tempLines = [];
+  var h_before = enthalpy(T_out, W_in);
+  if (isSteam) {
+    // 蒸汽加湿（近似等温）：饱和蒸汽焓 h_steam≈2676 kJ/kg，能量守恒求加湿后温度
+    var h_steam = 2676;                                       // kJ/kg，饱和蒸汽≈100℃
+    var h_after = h_before + (W_out - W_in) * h_steam;        // 湿空气能量平衡
+    var T_after = tempFromEnthalpyAndW(h_after, W_out);
+    var dT_steam = T_after - T_out;
+    tempLines.push({ label: "对空气温度的影响", value: "基本无影响（近似等温，干球温度变化通常 ≤2℃）" });
+    tempLines.push({ label: "原因", value: "饱和蒸汽(~100℃)焓≈2676 kJ/kg，加入空气后释放的显热≈把同量水汽化并升温至空气状态所需热量，干球温度几乎不变（仅因蒸汽温度高于空气而微升）" });
+    tempLines.push({ label: "能量平衡式", value: "h₂ = h₁ + ΔW·h_steam = " + fmt(h_before, 2) + " + " + fmt((W_out - W_in) * 1000, 2) + " g/kg × 2676 = " + fmt(h_after, 2) + " kJ/kg" });
+    tempLines.push({ label: "加湿后送风温度", value: fmt(T_after, 2) + "℃（变化 " + (dT_steam >= 0 ? "+" : "") + fmt(dT_steam, 2) + "℃）" });
+  } else {
+    // 等焓加湿（蒸发冷却）：焓不变，求加湿后温度；受湿球（饱和）极限约束
+    var T_after = tempFromEnthalpyAndW(h_before, W_out);
+    var dT_adiab = T_after - T_out;
+    // 湿球极限：等焓过程终点为湿球温度，超过则空气已达饱和，多余水不蒸发
+    var P_v1 = W_in * pa / (0.622 + W_in);
+    var wb = calcWetBulb(P_v1, T_out, pa);
+    var T_wb = wb ? wb.ts : T_after;
+    var W_sat_wb = satPressure(T_wb) * 0.622 / (pa - satPressure(T_wb));
+    var saturated = (W_out > W_sat_wb + 1e-6);
+    tempLines.push({ label: "对空气温度的影响", value: "显著降低（等焓加湿，干球温度下降）" });
+    tempLines.push({ label: "原因", value: "水蒸发吸收空气显热（蒸发冷却），过程焓值近似不变，含湿量增加的同时干球温度下降" });
+    tempLines.push({ label: "等焓计算式", value: "h = const = " + fmt(h_before, 2) + " kJ/kg；求解 T₂ 使 h(T₂, W₂) = h" });
+    if (saturated) {
+      tempLines.push({ label: "加湿后送风温度", value: "理论等焓终点 " + fmt(T_after, 1) + "℃ 低于湿球极限 " + fmt(T_wb, 1) + "℃ → 实际达饱和极限 " + fmt(T_wb, 1) + "℃，仅可蒸发 ΔW≈" + fmt((W_sat_wb - W_in) * 1000, 2) + " g/kg" });
+      tempLines.push({ label: "工艺提示", value: "请求 ΔW=" + fmt(deltaW, 2) + " g/kg 超过等焓可蒸发上限，空气在 " + fmt(T_wb, 1) + "℃ 饱和；若需更高含湿量须改用蒸汽(等温)加湿或分段处理。" });
+    } else {
+      tempLines.push({ label: "加湿后送风温度", value: fmt(T_after, 2) + "℃（下降 " + fmt(-dT_adiab, 2) + "℃）" });
+      tempLines.push({ label: "工艺提示", value: "若要维持 " + fmt(T_out, 1) + "℃ 不变，需将加湿前空气再热提高 " + fmt(-dT_adiab, 1) + "℃。" });
+    }
   }
 
   // ===== 部件设计（方法相关）=====
@@ -1341,19 +1365,17 @@ function runHumidifierDesign() {
       { label: "确定方案", value: method.name + "（" + method.category + "）" },
       { label: "过程特征", value: method.heat }
     ])},
-    { title: "三、加湿量计算", lines: [
+    { title: "三、温度影响分析（按加湿方式）", lines: tempLines },
+    { title: "四、加湿量计算", lines: [
       { label: "加湿量（极限）", value: fmt(m_humid, 2) + " kg/h" },
       { label: "选型安全系数", value: _epH.KHumid + "（GB/T 14294-2026）" },
       { label: "选型加湿量", value: fmt(m_sel, 0) + " kg/h" }
     ]},
-    { title: "四、设备选型与部件设计", lines: partLines }
+    { title: "五、设备选型与部件设计", lines: partLines }
   ];
 
   if (distLines.length > 0) {
-    sections.push({ title: "五、分配管/管路设计", lines: distLines });
-  }
-  if (adiabLines.length > 0) {
-    sections.push({ title: (distLines.length > 0 ? "六" : "五") + "、等焓过程送风温度", lines: adiabLines });
+    sections.push({ title: "六、分配管/管路设计", lines: distLines });
   }
 
   sections.push({ title: "功耗与水质", lines: [
