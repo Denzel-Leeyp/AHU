@@ -1116,7 +1116,37 @@ function runHeaterDesign() {
   ]);
 }
 
-/** 运行加湿器设计计算 */
+/** 加湿方式决策矩阵
+ *  根据选择的方式、水质类型、出口温度，确定最终加湿方案。
+ *  - 等温（蒸汽）：电极式需导电水（自来水）；纯水不导电→电极式失效，自动改电热式
+ *  - 等焓（蒸发）：湿膜 / 高压喷雾，对水质要求为“过滤+低硬度”，纯水最佳
+ */
+function decideHumidMethod(methodSel, waterType, T_out) {
+  var key;
+  if (methodSel === "auto") {
+    if (T_out >= 10) {
+      // 蒸汽（等温）优先；纯水→电热式，自来水→电极式
+      key = (waterType === "pure") ? "resistive" : "electrode";
+    } else {
+      // 低温环境默认湿膜（等焓），避免蒸汽在冷空气中冷凝
+      key = "wetfilm";
+    }
+  } else {
+    key = methodSel; // electrode / resistive / wetfilm / spray
+  }
+
+  var map = {
+    electrode:  { name: "电极式蒸汽加湿", category: "等温（蒸汽）", heat: "蒸汽温度≈100℃，含湿量增加，温度基本不变" },
+    resistive:  { name: "电热式（电阻式）蒸汽加湿", category: "等温（蒸汽）", heat: "加热元件沸腾产汽，含湿量增加，温度基本不变" },
+    wetfilm:    { name: "湿膜加湿", category: "等焓（蒸发）", heat: "水沿湿膜蒸发吸热，含湿量增加，温度下降" },
+    spray:      { name: "高压喷雾加湿", category: "等焓（蒸发）", heat: "高压微雾蒸发吸热，含湿量增加，温度下降" }
+  };
+  var info = map[key] || map.resistive;
+  info.key = key;
+  return info;
+}
+
+/** 运行加湿器设计计算（支持电极/电热/湿膜/高压喷雾，并修正纯水水质匹配） */
 function runHumidifierDesign() {
   var m_humid = parseFloat(document.getElementById("cd-m_humid").value) || 0;
   var volFlow = parseFloat(document.getElementById("cd-volFlow").value) || 0;
@@ -1125,10 +1155,20 @@ function runHumidifierDesign() {
   var tempIn = parseFloat(document.getElementById("cd-tempIn").value) || 35;
   var rhIn = parseFloat(document.getElementById("cd-rhIn").value) || 80;
   var rhOut = parseFloat(document.getElementById("cd-rhOut").value) || 50;
-  var pa = 101.325;
+  var pa = parseFloat(document.getElementById("cd-atmPressure") ? document.getElementById("cd-atmPressure").value : null) || 101.325;
+  var waterType = (document.getElementById("cd-waterType") ? document.getElementById("cd-waterType").value : "pure") || "pure";
+  var methodSel = (document.getElementById("cd-humidMethod") ? document.getElementById("cd-humidMethod").value : "auto") || "auto";
 
-  var humid_type = m_humid > 0 ? (T_out >= 10 ? "电极蒸汽加湿（等温加湿）" : "湿膜加湿（等焓加湿）") : "无需加湿";
-  var P_humid = m_humid * 0.62;
+  if (m_humid <= 0) {
+    document.getElementById("cd-humidifier-result").innerHTML =
+      '<div class="physics-warnings"><p>💧 当前加湿量 = 0，无需加湿。若需设计加湿器，请在上方「加湿量 (kg/h)」输入正值，并选择水质与加湿方式。</p></div>';
+    return;
+  }
+
+  var method = decideHumidMethod(methodSel, waterType, T_out);
+  var isSteam = (method.category.indexOf("等温") >= 0);
+  var isAdiabatic = !isSteam;
+
   var _epH = getEngineeringParams();
   var m_sel = Math.ceil(m_humid * _epH.KHumid);
   var vol_m3s = volFlow / 3600;
@@ -1142,59 +1182,175 @@ function runHumidifierDesign() {
   var W_out = calcHumidityRatio(T_out, rhOut, pa);
   var deltaW = (W_out - W_in) * 1000;
 
+  // 自来水进水流量（纯水由 RO 制取，回收率 65%）
   var roFlow = m_humid / 0.65;
   var roRated = Math.ceil(m_humid * 1.2 / 0.65);
 
-  var tubes = Math.ceil((W * 1000) / 150);
-  var orificesPerTube = Math.ceil((H * 1000) / 120);
+  // ===== 兼容性校核（关键：电极式不能用纯水）=====
+  var compat = [];
+  if (method.key === "electrode" && waterType === "pure") {
+    compat.push("❌ 严重不匹配：电极式加湿依赖水的导电性，纯水（≤5 μS/cm）近乎绝缘，无法产生蒸汽。已为您自动切换为「电热式蒸汽加湿」。");
+    method = decideHumidMethod("resistive", waterType, T_out);
+    isSteam = true; isAdiabatic = false;
+  }
+  if (method.key === "electrode" && waterType === "tap") {
+    compat.push("✅ 匹配：电极式适用市政自来水（电导率宜 100~800 μS/cm）。");
+  }
+  if (method.key === "resistive") {
+    compat.push(waterType === "pure"
+      ? "✅ 匹配：电热式靠加热元件产汽，纯水可用且低结垢，推荐 RO 纯水。"
+      : "✅ 匹配：电热式可用自来水，但长期运行易结垢，建议软化处理。");
+  }
+  if (method.key === "wetfilm") {
+    compat.push(waterType === "pure"
+      ? "✅ 匹配：湿膜用纯水最佳，无结垢堵塞风险。"
+      : "⚠ 可用但需处理：湿膜用自来水须先软化+过滤，否则湿膜易结垢堵塞。");
+  }
+  if (method.key === "spray") {
+    compat.push(waterType === "pure"
+      ? "✅ 匹配：高压微雾喷嘴用纯水最佳，无堵塞风险。"
+      : "⚠ 必须过滤：高压微雾喷嘴孔径仅 0.1~0.15mm，自来水须 ≤50μm 过滤并软化，否则严重堵塞。");
+  }
 
-  document.getElementById("cd-humidifier-result").innerHTML = buildDesignReport("💧 加湿器详细设计", [
+  // ===== 功耗 =====
+  var P_steam = m_humid * 0.75;            // 等温蒸汽：综合潜热+显热+热损失 ≈ 0.75 kW·h/kg
+  var P_pump_spray = (m_humid / 1000 / 3600) * 70e5 / 0.55 / 1000; // 高压泵 70bar, η=0.55
+  var P_wetfilm = 0.02;                    // 湿膜循环水泵，极小
+  var powerStr, powerNote;
+  if (method.key === "electrode" || method.key === "resistive") {
+    powerStr = fmt(P_steam, 2) + " kW（电耗 " + fmt(m_humid * 0.75, 2) + " kW·h/kg 蒸汽，含潜热+显热+热损失）";
+    powerNote = "等温加湿：电能全部转化为水蒸气潜热，送风温度基本不变。";
+  } else if (method.key === "spray") {
+    powerStr = fmt(P_pump_spray + 0.05, 2) + " kW（高压泵 " + fmt(P_pump_spray, 3) + " kW + 控制 " + fmt(0.05, 2) + " kW）";
+    powerNote = "等焓加湿：仅消耗泵功，无电热耗，节能显著（约为蒸汽法的 1/50~1/100）。";
+  } else { // wetfilm
+    powerStr = fmt(P_wetfilm, 2) + " kW（仅循环水泵，可忽略）";
+    powerNote = "等焓加湿：无电热耗，仅维持水循环，最节能。";
+  }
+
+  // ===== 等焓加湿送风温度下降估算 =====
+  var adiabLines = [];
+  if (isAdiabatic && deltaW > 0) {
+    var h_before = enthalpy(T_out, W_in);
+    var T_post = tempFromEnthalpyAndW(h_before, W_out);
+    var dT = T_out - T_post;
+    adiabLines.push({ label: "加湿前空气状态", value: fmt(T_out, 1) + "℃ / " + fmt(W_in * 1000, 2) + " g/kg（等焓过程起点）" });
+    adiabLines.push({ label: "加湿后送风温度", value: fmt(T_post, 1) + "℃（下降 " + fmt(dT, 1) + "℃）" });
+    adiabLines.push({ label: "工艺提示", value: "等焓加湿使送风降温 " + fmt(dT, 1) + "℃；若要维持 " + fmt(T_out, 1) + "℃ 不变，需将加湿前空气再热提高 " + fmt(dT, 1) + "℃。" });
+  }
+
+  // ===== 部件设计（方法相关）=====
+  var partLines = [];
+  var distLines = [];
+  if (method.key === "electrode" || method.key === "resistive") {
+    partLines.push({ label: "加湿罐", value: method.key === "electrode" ? "电极罐（不锈钢/玻璃钢，内置电极）" : "不锈钢蒸汽罐 + 电热管（Incoloy 800 加热元件）" });
+    partLines.push({ label: "产汽能力", value: fmt(m_sel, 0) + " kg/h（安全系数 " + _epH.KHumid + "）" });
+    partLines.push({ label: "补水水质", value: waterType === "pure" ? "RO 纯水 ≤5 μS/cm（电热式）" : "市政自来水 100~800 μS/cm（电极式）" });
+    // 蒸汽分配管
+    var tubes = Math.ceil((W * 1000) / 150);
+    var orificesPerTube = Math.ceil((H * 1000) / 120);
+    distLines.push({ label: "迎面面积", value: fmt(A_face, 2) + " m²（宽 " + fmt(W * 1000, 0) + " × 高 " + fmt(H * 1000, 0) + " mm）" });
+    distLines.push({ label: "蒸汽分配管数量", value: tubes + " 根（间距约150mm）" });
+    distLines.push({ label: "每根管蒸汽孔", value: orificesPerTube + " 个（间距约120mm）" });
+    distLines.push({ label: "喷管材质", value: "304 不锈钢，φ22×1.5mm" });
+  } else if (method.key === "wetfilm") {
+    partLines.push({ label: "湿膜模块", value: "纤维素/无机玻璃纤维湿膜，厚度 100mm（可选 50/150/200mm）" });
+    partLines.push({ label: "迎面面积", value: fmt(A_face, 2) + " m²（宽 " + fmt(W * 1000, 0) + " × 高 " + fmt(H * 1000, 0) + " mm）" });
+    partLines.push({ label: "迎面风速", value: fmt(v_face, 2) + " m/s（建议 1.5~2.5 m/s）" });
+    partLines.push({ label: "循环水量", value: fmt(m_humid * 3, 1) + " kg/h（循环倍率约3，仅补水 " + fmt(m_humid, 2) + " kg/h 蒸发损耗）" });
+    partLines.push({ label: "布水与挡水", value: "顶部布水盘（UPVC）+ 下部挡水板（304SS）+ 排水" });
+    partLines.push({ label: "补水管径", value: "DN15，配浮球阀/电磁阀" });
+  } else { // spray
+    var qNozzle = 3; // L/h @ 70bar 单喷嘴
+    var nozByFlow = Math.ceil(m_humid / qNozzle);
+    var rows = Math.max(1, Math.ceil((H * 1000) / 400));
+    var perRow = Math.max(1, Math.ceil((W * 1000) / 400));
+    var nozByLayout = rows * perRow;
+    var nozzles = Math.max(nozByFlow, nozByLayout);
+    partLines.push({ label: "高压柱塞泵", value: "≈70 bar（推荐 40~100 bar），流量 " + fmt(m_humid, 1) + " L/h，304SS/陶瓷柱塞" });
+    partLines.push({ label: "微雾喷嘴", value: "黄铜/316SS，" + nozzles + " 个（单喷嘴≈" + qNozzle + " L/h@70bar，孔径 0.1~0.15mm）" });
+    partLines.push({ label: "喷嘴布置", value: rows + " 排 × " + perRow + " 个/排（间距约400mm），覆盖 " + fmt(W * 1000, 0) + "×" + fmt(H * 1000, 0) + " mm" });
+    partLines.push({ label: "前置过滤", value: "保安过滤器 ≤50μm（建议+软化/RO），防止喷嘴堵塞" });
+    partLines.push({ label: "高压管路", value: "304 不锈钢，φ12×1mm，配泄压阀与防震支架" });
+    // 喷雾分配管
+    distLines.push({ label: "喷雾分配管", value: Math.ceil((W * 1000) / 300) + " 根（间距约300mm，φ12 304SS）" });
+    distLines.push({ label: "喷雾段长度", value: "≥ 600 mm（保证雾滴完全蒸发，避免带水）" });
+  }
+
+  // ===== 水系统（纯水时给出 RO 接口）=====
+  var waterLines = [];
+  if (waterType === "pure") {
+    waterLines.push({ label: "纯水需求量", value: fmt(m_humid, 2) + " kg/h（蒸发消耗）" });
+    waterLines.push({ label: "RO 进水（回收率65%）", value: fmt(roFlow, 2) + " kg/h" });
+    waterLines.push({ label: "RO 膜选型流量", value: fmt(roRated, 0) + " kg/h" });
+    waterLines.push({ label: "纯水箱容积", value: "按 1~2h 用量 = " + fmt(Math.ceil(m_humid), 0) + " ~ " + fmt(Math.ceil(m_humid * 2), 0) + " L" });
+    waterLines.push({ label: "水质指标", value: "电导率 ≤5 μS/cm，pH 6.5~7.5（GB/T 17323）" });
+    waterLines.push({ label: "纯水管道", value: "UPVC 或 304 不锈钢" });
+  } else {
+    waterLines.push({ label: "自来水需求量", value: fmt(m_humid, 2) + " kg/h（蒸发消耗）" });
+    waterLines.push({ label: "水压/管径", value: "≥ 0.15 MPa，DN15 补水管" });
+    if (method.key === "spray" || method.key === "wetfilm") {
+      waterLines.push({ label: "水质处理", value: "须软化 + 过滤（喷雾≤50μm / 湿膜≤100μm），硬度<50mg/L" });
+    } else {
+      waterLines.push({ label: "水质指标", value: "电导率 100~800 μS/cm（电极式适用）" });
+    }
+  }
+
+  // ===== 标准依据（方法相关）=====
+  var stdLines = [
+    { label: "加湿器标准", value: "GB/T 29736-2013《空调设备用加湿器》" },
+    { label: "安装标准", value: "GB/T 14294-2026《组合式空调机组》" }
+  ];
+  if (waterType === "pure") {
+    stdLines.push({ label: "水质标准", value: "GB/T 17323《瓶装饮用纯净水》（纯水≤5μS/cm）" });
+  } else if (method.key === "electrode") {
+    stdLines.push({ label: "水质标准", value: "市政自来水，电导率 100~800 μS/cm（电极式给水）" });
+  } else {
+    stdLines.push({ label: "水质标准", value: "GB/T 17219《生活饮用水输配水设备》/ 软化水要求" });
+  }
+
+  // ===== 组装报告 =====
+  var sections = [
     { title: "一、设计输入参数", lines: [
       { label: "设计加湿量", value: fmt(m_humid, 2) + " kg/h = " + fmt(m_humid / 3.6, 2) + " g/s" },
       { label: "处理风量", value: fmt(volFlow, 0) + " m³/h" },
-      { label: "入口/出口含湿量差 ΔW", value: fmt(deltaW, 2) + " g/kg" },
-      { label: "出口温度", value: fmt(T_out, 1) + " ℃" }
+      { label: "含湿量差 ΔW", value: fmt(deltaW, 2) + " g/kg（" + fmt(W_in * 1000, 2) + "→" + fmt(W_out * 1000, 2) + " g/kg）" },
+      { label: "目标送风温度", value: fmt(T_out, 1) + " ℃" },
+      { label: "水质类型", value: waterType === "pure" ? "纯水（RO ≤5 μS/cm）" : "自来水（市政）" }
     ]},
-    { title: "二、加湿方式选择", lines: [
-      { label: "推荐方式", value: humid_type + (m_humid > 0 ? (T_out >= 10 ? "（蒸汽温度≈100℃，含湿量增加，温度不变）" : "（水蒸发吸热，含湿量增加，温度降低）") : "") },
-      { label: "选型依据", value: (T_out >= 10 ? "T_out≥10℃ → 等温加湿（蒸汽），加湿不会导致空气温度过低" : "T_out<10℃ → 等焓加湿（湿膜），蒸汽冷凝风险低") }
-    ]},
-    { title: "三、蒸汽量计算", lines: [
+    { title: "二、加湿方式选择", lines: compat.concat([
+      { label: "确定方案", value: method.name + "（" + method.category + "）" },
+      { label: "过程特征", value: method.heat }
+    ])},
+    { title: "三、加湿量计算", lines: [
       { label: "加湿量（极限）", value: fmt(m_humid, 2) + " kg/h" },
-      { label: "选型安全系数", value: "1.15（GB/T 14294-2026）" },
-      { label: "选型蒸汽量", value: fmt(m_sel, 0) + " kg/h" }
+      { label: "选型安全系数", value: _epH.KHumid + "（GB/T 14294-2026）" },
+      { label: "选型加湿量", value: fmt(m_sel, 0) + " kg/h" }
     ]},
-    { title: "四、蒸汽分配管设计", lines: [
-      { label: "迎面面积", value: fmt(A_face, 2) + " m²" },
-      { label: "宽度 × 高度", value: fmt(W * 1000, 0) + " × " + fmt(H * 1000, 0) + " mm" },
-      { label: "推荐分配管数量", value: tubes + " 根（间距约150mm）" },
-      { label: "每根管喷孔数量", value: orificesPerTube + " 个（间距约120mm）" },
-      { label: "喷管材质", value: "304 不锈钢，φ22×1.5mm" }
-    ]},
-    { title: "五、功耗与水质", lines: [
-      { label: "加湿功耗（电极式）", value: fmt(P_humid, 2) + " kW（电耗 " + fmt(m_humid * 0.62, 2) + " kW，汽化潜热 0.62 kW·h/kg）" },
-      { label: "纯水需求量", value: fmt(m_humid, 2) + " kg/h" },
-      { label: "纯水电导率要求", value: "≤ 5 μS/cm（GB/T 18300-2025）" },
-      { label: "纯水 pH 值", value: "6.5 ~ 7.5" }
-    ]},
-    { title: "六、纯水系统接口", lines: [
-      { label: "自来水进水（RO回收率65%）", value: fmt(roFlow, 2) + " kg/h" },
-      { label: "RO膜选型流量", value: fmt(roRated, 0) + " kg/h" },
-      { label: "纯水箱容积建议", value: "按 1~2 小时用水量 = " + fmt(Math.ceil(m_humid), 0) + " ~ " + fmt(Math.ceil(m_humid * 2), 0) + " L" },
-      { label: "纯水管道材质", value: "UPVC 或 304 不锈钢" }
-    ]},
-    { title: "七、控制与保护", lines: [
-      { label: "控制方式", value: "PID 湿度闭环控制" },
-      { label: "湿度传感器", value: "出口管道安装，精度 ±1.5%RH" },
-      { label: "安全保护", value: "缺水保护、过流保护、超温保护" },
-      { label: "阀门控制", value: "电动蒸汽调节阀，0~10V 控制信号" }
-    ]},
-    { title: "八、标准依据", lines: [
-      { label: "加湿器标准", value: "GB/T 29736-2013《空调设备用加湿器》" },
-      { label: "水质标准", value: "GB/T 17323《瓶装饮用纯净水》（电极加湿器给水≤5μS/cm）" },
-      { label: "安装标准", value: "GB/T 14294-2026《组合式空调机组》" }
-    ]}
-  ]);
+    { title: "四、设备选型与部件设计", lines: partLines }
+  ];
+
+  if (distLines.length > 0) {
+    sections.push({ title: "五、分配管/管路设计", lines: distLines });
+  }
+  if (adiabLines.length > 0) {
+    sections.push({ title: (distLines.length > 0 ? "六" : "五") + "、等焓过程送风温度", lines: adiabLines });
+  }
+
+  sections.push({ title: "功耗与水质", lines: [
+    { label: "加湿功耗", value: powerStr },
+    { label: "能耗说明", value: powerNote }
+  ].concat(waterLines) });
+
+  sections.push({ title: "控制与保护", lines: [
+    { label: "控制方式", value: isSteam ? "PID 湿度闭环 + 蒸汽调节阀（0~10V）" : "PID 湿度闭环 + 水泵变频/电磁阀" },
+    { label: "湿度传感器", value: "出口管道安装，精度 ±1.5%RH" },
+    { label: "安全保护", value: isSteam ? "缺水保护、过流保护、超温熔断、蒸汽泄压" : "缺水保护、泵过载保护、喷嘴堵塞报警、泄压阀" }
+  ]});
+
+  sections.push({ title: "标准依据", lines: stdLines });
+
+  document.getElementById("cd-humidifier-result").innerHTML = buildDesignReport("💧 加湿器详细设计 — " + method.name, sections);
 }
 
 // ============================================

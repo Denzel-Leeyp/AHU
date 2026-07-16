@@ -44,6 +44,18 @@ function enthalpy(T, W) {
   return 1.006 * T + W * (2501 + 1.86 * T);
 }
 
+/**
+ * 由焓 h(kJ/kg) 与含湿量 W(kg/kg) 反推干球温度 T(℃)
+ * 由 enthalpy(T,W)=1.006·T + W·(2501+1.86·T) 解出：
+ *   T = (h − 2501·W) / (1.006 + 1.86·W)
+ * 用途：等焓（绝热）加湿过程求加湿后送风温度。
+ */
+function tempFromEnthalpyAndW(h, W) {
+  var denom = 1.006 + 1.86 * W;
+  if (Math.abs(denom) < 1e-9) return NaN;
+  return (h - 2501 * W) / denom;
+}
+
 /** 格式化数字 — 负荷<1时多保留2位有效小数，避免 0.004 kW 显示为 0.00 */
 function fmt(v, d) {
   v = Number(v);
