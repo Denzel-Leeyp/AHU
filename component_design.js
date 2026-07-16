@@ -1,7 +1,7 @@
 // ============================================
 // component_design.js - 零部件详细设计模块
 // 涡轮增压器测试台进气空调 (AHU) 计算器 v2.0
-// 包含：表冷器、加热器、加湿器的详细设计计算
+// 包含：表冷器、加热器、加湿器、纯水制水系统的详细设计计算
 // ============================================
 
 var currentDesignTab = "coil";
@@ -338,6 +338,25 @@ function switchDesignTab(tab) {
   if (tab === "coil") { document.getElementById("design-coil").style.display = "block"; runCoilDesign(); }
   else if (tab === "heater") { document.getElementById("design-heater").style.display = "block"; runHeaterDesign(); }
   else if (tab === "humidifier") { document.getElementById("design-humidifier").style.display = "block"; runHumidifierDesign(); }
+  else if (tab === "purewater") {
+    document.getElementById("design-purewater").style.display = "block";
+    // 若纯水产量未填，尝试从加湿器加湿量导入
+    var pwDemand = document.getElementById("cd-pw-demand");
+    if (pwDemand && (pwDemand.value === "" || parseFloat(pwDemand.value) === 0)) {
+      var mh = parseFloat(document.getElementById("cd-m_humid") ? document.getElementById("cd-m_humid").value : 0) || 0;
+      if (mh > 0) pwDemand.value = fmt(mh, 1);
+      // 若加湿器选纯水，联动用途
+      var wt = document.getElementById("cd-waterType") ? document.getElementById("cd-waterType").value : "pure";
+      var hm = document.getElementById("cd-humidMethod") ? document.getElementById("cd-humidMethod").value : "auto";
+      var uc = document.getElementById("cd-pw-usecase");
+      if (wt === "pure" && uc) {
+        if (hm === "spray") uc.value = "spray";
+        else if (hm === "wetfilm") uc.value = "wetfilm";
+        else uc.value = "steam";
+      }
+    }
+    runPureWaterDesign();
+  }
   else if (tab === "fan") {
     document.getElementById("design-fan").style.display = "block";
     // 同步风量和排数
@@ -1351,6 +1370,160 @@ function runHumidifierDesign() {
   sections.push({ title: "标准依据", lines: stdLines });
 
   document.getElementById("cd-humidifier-result").innerHTML = buildDesignReport("💧 加湿器详细设计 — " + method.name, sections);
+}
+
+// ============================================
+// 纯水制水系统（RO）详细设计
+// ============================================
+/** 标准容器直径圆整（最小 φ150mm） */
+function roundVesselDia(D) {
+  var std = [150, 200, 250, 300, 350, 400, 500, 600, 800, 1000];
+  for (var i = 0; i < std.length; i++) if (std[i] >= D) return std[i];
+  return 1000;
+}
+
+/** 运行纯水制水系统（RO）设计计算
+ *  涵盖：系统工艺配置、关键元器件选型、水量/水质/能耗计算过程。
+ *  工艺链：原水 → 原水箱 → 原水泵 → 多介质过滤器 → 活性炭过滤器 →
+ *          [软化器] → 保安过滤器(5μm) → RO高压泵 → RO膜堆 → 纯水箱 →
+ *          纯水泵 → [UV杀菌] → 用水点（加湿器）
+ */
+function runPureWaterDesign() {
+  var Q_pure = parseFloat(document.getElementById("cd-pw-demand").value) || 0;       // 纯水产量 kg/h ≈ L/h
+  var C_feed = parseFloat(document.getElementById("cd-pw-feedCond").value) || 350;   // 原水电导率 μS/cm
+  var recovery = parseFloat(document.getElementById("cd-pw-recovery").value) || 65;  // RO 回收率 %
+  var C_target = parseFloat(document.getElementById("cd-pw-targetCond").value) || 5; // 目标纯水电导率 μS/cm
+  var hardness = parseFloat(document.getElementById("cd-pw-hardness").value) || 150;  // 原水硬度 mg/L as CaCO3
+  var usecase = document.getElementById("cd-pw-usecase") ? document.getElementById("cd-pw-usecase").value : "steam";
+
+  if (Q_pure <= 0) {
+    document.getElementById("cd-purewater-result").innerHTML =
+      '<div class="physics-warnings"><p>🚰 纯水产量 = 0。请先输入纯水产量（可在「加湿器」页设好加湿量后切回本页自动导入），再点击运行。</p></div>';
+    return;
+  }
+
+  var r = Math.min(Math.max(recovery, 30), 85) / 100;      // 回收率限制 30%~85%
+  var Q_feed = Q_pure / r;                                  // 原水（RO进水）流量 kg/h
+  var Q_conc = Q_feed - Q_pure;                             // 浓水（排放）流量 kg/h
+
+  // ===== 水质计算与 RO 级数判定 =====
+  var R1 = 0.99;                                            // 单级 RO 脱盐率（设计值，GB/T 19249 要求≥98%）
+  var C1 = C_feed * (1 - R1);                               // 单级产品电导率 μS/cm
+  var needDouble = (C1 > C_target);                        // 单级不达目标→需双级
+  var R2 = 0.98, C2 = C1 * (1 - R2);                        // 双级二级产品电导率
+
+  // ===== RO 膜元件选型 =====
+  var elemType, qElem, perVessel;
+  if (Q_pure <= 500) { elemType = "4040"; qElem = 250; perVessel = 4; }   // 4040 元件~250 L/h·支
+  else { elemType = "8040"; qElem = 1000; perVessel = 6; }                // 8040 元件~1000 L/h·支
+  var nElem = Math.max(1, Math.ceil(Q_pure / qElem));
+  var nVessel = Math.max(1, Math.ceil(nElem / perVessel));
+
+  // ===== RO 高压泵（单级供水）=====
+  var dp1 = 1.2e6;                                          // 单级 RO 操作压力 ~1.2 MPa（苦咸水）
+  var eta_p = 0.70;
+  var P_pump1 = (Q_feed / 3600) * dp1 / eta_p / 1000;       // kW（水力功率）
+  var Q_feed2 = 0, P_pump2 = 0;
+  if (needDouble) {                                         // 双级二级泵
+    var r2 = 0.85;
+    Q_feed2 = Q_pure / r2;
+    P_pump2 = (Q_feed2 / 3600) * 1.0e6 / eta_p / 1000;
+  }
+  var P_pump_hyd = P_pump1 + P_pump2;
+  // 小流量系统铭牌功率通常为水力功率的 3~8 倍（电机余量+固定损耗）
+  var P_pump_name = Math.max(0.03, P_pump_hyd * 5);
+
+  // ===== 预处理容器尺寸（按 RO 进水流量，滤速 ~10 m/h）=====
+  var v_f = 10;                                             // 滤速 m/h
+  var Q_feed_m3h = Q_feed / 1000;
+  var D_calc = Math.sqrt(4 * Q_feed_m3h / (Math.PI * v_f)) * 1000; // mm
+  var D_mm = roundVesselDia(D_calc);
+  var H_v = 1.2;                                            // 滤料装填高度 m（估算）
+  var V_media = Math.PI * Math.pow(D_mm / 1000 / 2, 2) * H_v; // 单罐滤料体积 m³
+
+  // ===== 软化器（硬度>50 建议，保护 RO 膜并满足喷雾/湿膜低硬度要求）=====
+  var needSoften = hardness > 50;
+  var softLines = [];
+  if (needSoften) {
+    var C_res = 50;                                         // 树脂工作交换容量 ~50 g CaCO3 / L 树脂
+    var dailyLoad = Q_feed * hardness;                      // g/天（按 24h 连续）
+    var regenTarget = 3;                                    // 目标再生周期 ≥3 天
+    var V_res_req = dailyLoad * regenTarget / (1000 * C_res); // 所需树脂体积 m³
+    var D_soft = roundVesselDia(Math.sqrt(4 * V_res_req / (Math.PI * H_v)) * 1000);
+    var V_res = Math.PI * Math.pow(D_soft / 1000 / 2, 2) * H_v;
+    var cap_g = V_res * 1000 * C_res;                       // 周期交换容量 g
+    var regenDays = dailyLoad > 0 ? cap_g / dailyLoad : 99;
+    softLines.push({ label: "软化器罐体", value: "φ" + D_soft + " 不锈钢/玻璃钢，树脂装填 " + fmt(V_res, 2) + " m³" });
+    softLines.push({ label: "工作交换容量", value: fmt(cap_g / 1000, 1) + " kg CaCO3（树脂 " + fmt(C_res, 0) + " g/L）" });
+    softLines.push({ label: "再生周期", value: "约 " + fmt(regenDays, 1) + " 天（盐耗约 " + fmt(cap_g / 1000 * 0.15, 1) + " kg NaCl/次）" + (regenDays < 1 ? " ⚠ 建议多罐并联或加大树脂量" : "") });
+  }
+
+  // ===== 纯水箱 + 纯水泵 =====
+  var V_tank = Q_pure * 2;                                  // 1~2h 缓冲
+  var dp_trans = 0.2e6;                                     // 纯水泵扬程 ~0.2 MPa
+  var P_trans = (Q_pure / 3600) * dp_trans / 0.50 / 1000;
+
+  // ===== 报告组装 =====
+  var processLines = [
+    { label: "工艺链", value: "原水 → 原水箱 → 原水泵 → 多介质过滤器 → 活性炭过滤器 → " + (needSoften ? "软化器 → " : "") + "保安过滤器(5μm) → RO高压泵 → RO膜堆 → 纯水箱 → 纯水泵" + (usecase === "spray" ? " → 终端微滤(≤1μm) → 高压喷雾" : " → 加湿器") }
+  ];
+
+  var configLines = [
+    { label: "纯水产量", value: fmt(Q_pure, 2) + " kg/h（≈ " + fmt(Q_pure, 1) + " L/h）" },
+    { label: "RO 回收率", value: fmt(r * 100, 0) + " %" },
+    { label: "RO 进水（原水）流量", value: fmt(Q_feed, 2) + " kg/h" },
+    { label: "浓水排放量", value: fmt(Q_conc, 2) + " kg/h（排放或回收冲洗）" },
+    { label: "纯水用途", value: usecase === "spray" ? "高压喷雾加湿（要求过滤≤50μm、硬度<50mg/L）" : (usecase === "wetfilm" ? "湿膜加湿（要求低硬度防堵）" : "蒸汽加湿（电极/电热，要求导电性或低结垢）") }
+  ];
+
+  var qualityLines = [
+    { label: "原水电导率", value: fmt(C_feed, 0) + " μS/cm" },
+    { label: "单级 RO 脱盐率", value: fmt(R1 * 100, 0) + " %（GB/T 19249 要求≥98% ✅）" },
+    { label: "单级产品电导率", value: fmt(C1, 2) + " μS/cm" },
+    { label: "级数判定", value: needDouble ? ("单级 " + fmt(C1, 2) + " > 目标 " + fmt(C_target, 1) + " → 需双级 RO ⚠") : ("单级 " + fmt(C1, 2) + " ≤ 目标 " + fmt(C_target, 1) + " → 单级 RO 即可 ✅") },
+    { label: "最终产品电导率", value: needDouble ? (fmt(C2, 3) + " μS/cm（双级二级脱盐率 " + fmt(R2 * 100, 0) + "%）") : (fmt(C1, 2) + " μS/cm") },
+    { label: "达标判定", value: (needDouble ? C2 : C1) <= C_target ? ("✅ 满足目标 ≤ " + fmt(C_target, 1) + " μS/cm（对应电阻率 ≥ " + fmt(1000 / (needDouble ? C2 : C1), 1) + " kΩ·cm）") : "❌ 未达标，请降低原水电导率或提高回收率" }
+  ];
+
+  var compLines = [
+    { label: "原水箱", value: "PE/不锈钢，容积 ≥ " + fmt(Q_feed * 1, 0) + " L（约1h原水缓冲）" },
+    { label: "原水泵", value: "流量 " + fmt(Q_feed, 1) + " L/h，扬程 ~0.25 MPa，0.25~0.55 kW" },
+    { label: "多介质过滤器", value: "φ" + D_mm + " 不锈钢/碳钢衬胶，滤速 " + fmt(v_f, 0) + " m/h，滤料石英砂+无烟煤（去悬浮物）" },
+    { label: "活性炭过滤器", value: "φ" + D_mm + " 同径，去余氯/有机物（保护 RO 膜，余氯<0.1mg/L）" },
+    { label: "保安过滤器", value: "5 μm 熔喷滤芯，20″ 单芯壳体（RO 膜前最后保护）" }
+  ];
+  if (needSoften) compLines = compLines.concat(softLines);
+  compLines.push({ label: "RO 高压泵", value: "多级离心泵，流量 " + fmt(Q_feed, 1) + " L/h，扬程 " + fmt(dp1 / 1e6, 1) + " MPa，水力功率 " + fmt(P_pump1, 3) + " kW（铭牌≈" + fmt(P_pump_name, 2) + " kW）" });
+  compLines.push({ label: "RO 膜元件", value: elemType + " 膜元件 " + nElem + " 支（单支~" + qElem + " L/h），装于 " + nVessel + " 支压力容器（每支" + perVessel + "支）" + (needDouble ? "，双级配置（二级 " + elemType + " 膜 " + Math.max(1, Math.ceil(Q_feed2 / qElem)) + " 支）" : "") });
+  compLines.push({ label: "纯水箱", value: "PE/不锈钢，容积 " + fmt(V_tank, 0) + " L（按 2h 产量缓冲）" });
+  compLines.push({ label: "纯水泵（输送）", value: "流量 " + fmt(Q_pure, 1) + " L/h，扬程 ~0.2 MPa，功率 " + fmt(P_trans, 3) + " kW" });
+  if (usecase === "spray") compLines.push({ label: "终端微滤", value: "1~5 μm 保安滤芯（防高压喷嘴堵塞）" });
+  compLines.push({ label: "UV/杀菌（可选）", value: "紫外线杀菌器（流量匹配），控制纯水菌落总数" });
+
+  var energyLines = [
+    { label: "RO 高压泵能耗", value: "水力 " + fmt(P_pump_hyd, 3) + " kW；设备铭牌 ≈ " + fmt(P_pump_name, 2) + " kW" },
+    { label: "纯水泵能耗", value: fmt(P_trans, 3) + " kW" },
+    { label: "单位纯水电耗", value: fmt((P_pump_name + P_trans) / Math.max(Q_pure / 1000, 1e-6), 2) + " kW·h/m³（含固定损耗）" },
+    { label: "与自来水直接对比", value: "纯水制取单位水耗电：小流量系统约 1~5 kW·h/m³（流量越小比能耗越高），大系统可低至 0.5~1.5 kW·h/m³；换取无结垢/无堵塞运行" }
+  ];
+
+  var stdLines = [
+    { label: "RO 设备标准", value: "GB/T 19249-2017《反渗透水处理设备》（脱盐率≥98%）" },
+    { label: "原水标准", value: "GB 5749-2022《生活饮用水卫生标准》" },
+    { label: "纯水水质", value: "GB/T 17323《瓶装饮用纯净水》（≤10 μS/cm）；目标 ≤" + fmt(C_target, 1) + " μS/cm 参照 GB/T 29736-2013" },
+    { label: "装置标准", value: "GB/T 30307-2013《家用和类似用途饮用水处理装置》" }
+  ];
+
+  var sections = [
+    { title: "一、系统工艺配置", lines: processLines },
+    { title: "二、设计输入与水量平衡", lines: configLines },
+    { title: "三、关键元器件及选型", lines: compLines },
+    { title: "四、水质计算与校核", lines: qualityLines },
+    { title: "五、运行能耗", lines: energyLines },
+    { title: "六、标准依据", lines: stdLines }
+  ];
+
+  document.getElementById("cd-purewater-result").innerHTML = buildDesignReport("🚰 纯水制水系统（RO）详细设计", sections);
 }
 
 // ============================================

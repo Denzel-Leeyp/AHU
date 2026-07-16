@@ -383,6 +383,7 @@
             <button class="design-tab-btn active" id="design-tab-coil" onclick="switchDesignTab('coil')">❄ 表冷器</button>
             <button class="design-tab-btn" id="design-tab-heater" onclick="switchDesignTab('heater')">🔥 加热器</button>
             <button class="design-tab-btn" id="design-tab-humidifier" onclick="switchDesignTab('humidifier')">💧 加湿器</button>
+            <button class="design-tab-btn" id="design-tab-purewater" onclick="switchDesignTab('purewater')">🚰 纯水系统</button>
             <button class="design-tab-btn" id="design-tab-fan" onclick="switchDesignTab('fan')">💨 风机</button>
           </div>
           <div id="design-coil" class="design-content" style="display:block;"><div id="cd-coil-result"><p class="placeholder">点击「设计表冷器」开始计算</p></div></div>
@@ -406,6 +407,23 @@
               </div>
             </div>
             <div id="cd-humidifier-result"><p class="placeholder">点击「设计加湿器」开始计算</p></div>
+          </div>
+          <div id="design-purewater" class="design-content" style="display:none;">
+            <div class="pw-input-bar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:8px 0;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
+              <div class="form-group" style="margin:0;"><label for="cd-pw-demand">纯水产量 (kg/h)</label><input type="number" id="cd-pw-demand" step="0.1" value="0"></div>
+              <div class="form-group" style="margin:0;"><label for="cd-pw-feedCond">原水电导率 (μS/cm)</label><input type="number" id="cd-pw-feedCond" step="10" value="350"></div>
+              <div class="form-group" style="margin:0;"><label for="cd-pw-recovery">RO 回收率 (%)</label><input type="number" id="cd-pw-recovery" step="1" value="65"></div>
+              <div class="form-group" style="margin:0;"><label for="cd-pw-targetCond">目标纯水电导率 (μS/cm)</label><input type="number" id="cd-pw-targetCond" step="0.5" value="5"></div>
+              <div class="form-group" style="margin:0;"><label for="cd-pw-hardness">原水硬度 (mg/L)</label><input type="number" id="cd-pw-hardness" step="10" value="150"></div>
+              <div class="form-group" style="margin:0;"><label for="cd-pw-usecase">纯水用途</label>
+                <select id="cd-pw-usecase" style="padding:4px;border:1px solid #cbd5e0;border-radius:4px;">
+                  <option value="steam">蒸汽加湿（电极/电热）</option>
+                  <option value="wetfilm">湿膜加湿</option>
+                  <option value="spray">高压喷雾加湿</option>
+                </select>
+              </div>
+            </div>
+            <div id="cd-purewater-result"><p class="placeholder">点击「设计纯水系统」开始计算</p></div>
           </div>
           <div id="design-fan" class="design-content" style="display:none;"><div id="cd-fan-result"><p class="placeholder">点击「设计风机」开始计算</p></div></div>
         </section>
